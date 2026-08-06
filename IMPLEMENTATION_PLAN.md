@@ -2,7 +2,20 @@
 
 > Python port of Rich Pawlowicz's m_map MATLAB toolbox for oceanographic mapping.
 > Reference MATLAB source: `../m_map/`
-> Target netCDF file for first test: `../barkley_sound_1_navd88_2016.nc`
+
+**Last reviewed: 2026-08-06.** This document is the design record: what was built,
+how, and why. It is deliberately kept as the place where architectural decisions
+live — the "Architectural Notes" section at the end has repeatedly turned out to be
+the only written source for behaviour that is easy to get wrong, so check it before
+changing rendering code.
+
+Three companion documents carry things this one does not:
+
+| Document | Holds |
+|---|---|
+| `REVIEW.md` | Code review findings (M1-M15), each with its failure case and how it was verified. The record of what was *wrong*. |
+| `PUBLISHING.md` | Packaging and distribution readiness; what is still open before a release. |
+| `CHANGELOG.md` | Release-facing summary, grouped by consequence. |
 
 ---
 
@@ -21,8 +34,11 @@
 ```
 py_m_map/                    ← package root
 ├── py_m_map/
-│   ├── __init__.py          # Public re-exports
+│   ├── __init__.py          # Public re-exports, __version__
 │   ├── _state.py            # MapState singleton (replaces MAP_PROJECTION global)
+│   ├── _data.py             # Optional-data location + fetch/cache (see below)
+│   ├── data/
+│   │   └── topo_1deg.npz    # Bundled 1° topography for m_elev (108 KB)
 │   ├── projection.py        # m_proj, m_ll2xy, m_xy2ll
 │   ├── grid.py              # m_grid
 │   ├── colormaps.py         # m_colmap
@@ -46,9 +62,15 @@ py_m_map/                    ← package root
 │   ├── image.py             # m_image
 │   ├── usercoast.py         # m_usercoast
 │   ├── windbarb.py          # m_windbarb
-│   ├── windrose.py          # m_windrose
-│   └── coordinates.py       # m_coord, m_geo2mag, ... [Phase 4+]
+│   └── windrose.py          # m_windrose
+│                            # (coordinates.py for m_coord/m_geo2mag was planned
+│                            #  but never written — see Known Limitations)
 ├── tests/
+│   ├── conftest.py          # Image-baseline comparison fixture (autouse)
+│   ├── example_data.py      # Registry of the real NOAA datasets the examples fetch
+│   ├── test_regressions.py  # 57 assertion-based tests, one per reviewed defect
+│   ├── baseline/            # Committed reference PNGs; the comparison gate
+│   │                        #   (excluded from the sdist — stack-specific)
 │   ├── test_example1.py     ✓ complete
 │   ├── test_example2.py     ✓ complete
 │   ├── test_example3.py     ✓ complete
@@ -71,24 +93,42 @@ py_m_map/                    ← package root
 │   ├── test_example17.py    ✓ complete  (South China Sea shaded relief, Mercator, m_etopo2 shadedrelief)
 │   ├── test_example18.py    ✓ complete  (Vancouver Harbour UTM, m_shadedrelief, m_gshhs_f, NHN rivers, m_utmgrid, m_ruler, m_northarrow)
 │   ├── test_example20.py    ✓ complete  (colourmap gallery)
-│   ├── test_sat_ex1.py      ~ synthetic data (pending real AVHRR SST HDF)
-│   ├── test_sat_ex2.py      ~ synthetic data (pending real SSM/I EASE-Grid HDF)
-│   ├── test_sat_ex3.py      ~ synthetic data (pending real aerial photo JPEG)
-│   ├── test_sat_ex4.py      ~ synthetic data (pending real SeaWiFS/MODIS HDF)
-│   ├── test_sat_ex6.py      ~ synthetic data (pending real ARGO netCDF)
-│   ├── test_sat_ex7.py      ~ synthetic data (pending real ERS-1 SAR HDF-5)
-│   └── outputs/             # Saved reference PNGs
+│   ├── test_example19.py    ✓ complete  (wind roses)
+│   ├── test_sat_ex1.py      ✓ real OISST v2 SST, Nov 1999 (fetched)
+│   ├── test_sat_ex2.py      ✓ real OISST v2 sea-ice concentration, Sep 2012 (fetched)
+│   ├── test_sat_ex4.py      ✓ real NE Pacific SST anomaly, "the Blob" (fetched)
+│   ├── test_sat_ex6.py      ~ synthetic float tracks (real Argo index is 315 MB)
+│   └── outputs/             # Freshly rendered figures; git-ignored
+├── .github/workflows/       # tests matrix, image baseline (manual), packaging
+├── README.md                # Front door
+├── CHANGELOG.md             # Release-facing history
+├── REVIEW.md                # Code review findings and their resolution
+├── PUBLISHING.md            # Distribution readiness
 ├── IMPLEMENTATION_PLAN.md   # This file
-├── EXAMPLES.md              # Markdown examples gallery (all 20 basic + 8 satellite examples)
+├── EXAMPLES.md              # Gallery (20 basic + 6 satellite examples)
+├── LICENSE                  # MIT, plus m_map/ETOPO1 acknowledgements
+├── MANIFEST.in
 └── pyproject.toml
-
-databases/                   ← sibling directory (../databases/ relative to package root)
-├── README.md                # Download instructions for large binary files
-└── etopo1_ice_g_i2/
-    └── etopo1_ice_g_i2.bin  # ETOPO1 ice-surface grid, little-endian int16, ~447 MB
-                             # Source: NGDC https://www.ngdc.noaa.gov/mgg/global/relief/
-                             #   ETOPO1/data/ice_surface/grid_registered/binary/
 ```
+
+`test_sat_ex3.py` (aerial photograph) and `test_sat_ex7.py` (ERS-1 SAR) were
+**deleted**: neither source is publicly retrievable and the synthetic stand-ins —
+three flat rectangles and a field of grey noise — demonstrated nothing.
+
+### Optional data
+
+Nothing outside the package is required any more. `m_elev` reads the bundled
+`data/topo_1deg.npz`. Two things remain optional, and `_data.py` resolves both by
+searching `$PY_M_MAP_DATA_DIR`, then `~/.py_m_map/`, then the legacy
+package-relative paths, reporting every location searched when absent:
+
+| File | Needed by | Size | Source |
+|---|---|---|---|
+| `etopo1_ice_g_i2.bin` | `m_etopo2` (falls back to `m_elev`) | ~447 MB | NGDC ETOPO1 ice-surface, grid-registered, little-endian int16 |
+| `barkley_sound_1_navd88_2016.nc` | `sat_ex8` only (skips without it) | large | No stable open URL; must be supplied locally |
+
+The example datasets (NOAA OI SST v2, NCEP reanalysis) are fetched on first use by
+`_data.fetch_data_file` and cached in `~/.py_m_map/`; see `tests/example_data.py`.
 
 ---
 
@@ -98,14 +138,29 @@ databases/                   ← sibling directory (../databases/ relative to pa
 [project]
 dependencies = [
     "numpy",
-    "matplotlib",
-    "pyproj",       # Geodetic transforms and projections
-    "shapely",      # Boundary clipping geometry
-    "xarray",       # Loading netCDF elevation data
-    "scipy",        # Interpolation, smoothing filters
-    "cartopy",      # Natural Earth coastline data
+    "matplotlib>=3.5",  # >=3.5 for per-cell alpha arrays (m_pcolor clipping)
+    "pyproj",           # Geodetic transforms and projections
+    "shapely",          # Boundary clipping geometry
+    "scipy",            # Interpolation, smoothing filters; .mat reading
+    "cartopy",          # Natural Earth + GSHHS coastline data
 ]
+
+[project.optional-dependencies]
+test = ["pytest", "xarray", "netcdf4"]
 ```
+
+Two corrections to what this section used to say:
+
+- **`xarray` is not a runtime dependency.** Nothing in `py_m_map` imports it. It was
+  listed for "loading netCDF elevation data", which `m_elev` never does — it reads
+  the bundled `.npz` through numpy, and `m_etopo2` reads a raw binary. Only the
+  example scripts read netCDF, so it belongs in the test extra.
+- **`netcdf4` has to be declared alongside it.** xarray cannot open a netCDF file
+  without a backend; a conda environment usually has one already, which is why the
+  omission only surfaced on a clean CI runner.
+
+`cartopy` is imported lazily inside functions, so `import py_m_map` works without
+it; it is needed only when coastlines are drawn.
 
 ---
 
@@ -140,14 +195,22 @@ dependencies = [
 
 | Example | Description | Projection | Key Functions | Status |
 |---------|-------------|------------|---------------|--------|
-| **sat_ex1** | Global SST from pcolor | Hammer-Aitoff | `m_pcolor`, `m_coast`, `m_grid` | ~ synthetic data; pending real AVHRR SST HDF |
-| **sat_ex2** | SSM/I sea-ice cover (HDF) | Azimuthal Equal-Area | `m_image`, `m_coast`, `m_grid` | ~ synthetic data; pending real SSM/I EASE-Grid HDF |
-| **sat_ex3** | Aerial photo on UTM grid | UTM | `m_image`, `m_grid` | ~ synthetic data; pending real georeferenced JPEG |
-| **sat_ex4** | Subset of global dataset (HDF) | Lambert | `m_pcolor`, `m_gshhs_i`, `m_grid` | ~ synthetic data; pending real SeaWiFS/MODIS HDF |
-| **sat_ex5** | Meteorological data — wind barbs | Miller cylindrical | `m_coast`, `m_contourf`, `m_windbarb`, `m_grid`, `m_contfbar`, `m_colmap` | ✓ |
-| **sat_ex6** | ARGO drifter tracks | Lambert | `m_etopo2`, `m_gshhs_l`, `m_grid`, `m_vec`, `m_line`, `m_idist`, `m_fdist`, `m_contfbar` | ~ synthetic data; pending real ARGO netCDF |
-| **sat_ex7** | SAR image of internal waves (HDF-5) | Lambert | `m_pcolor`, `m_grid`, `m_ruler` | ~ synthetic data; pending real ERS-1 SAR HDF-5 |
-| **sat_ex8** | Barkley Sound shaded relief + filled contours | Equidistant cylindrical | `m_shadedrelief`, `m_contourf`, `m_contfbar`, `m_colmap` | ✓ |
+All surviving satellite examples now use **real, openly available NOAA data**,
+fetched on first run and cached. The originals' HDF files are no longer publicly
+retrievable, and the modern satellite archives that would replace them (NASA
+OB.DAAC, NSIDC) require an Earthdata login, so NOAA PSL products were substituted
+where an equivalent exists.
+
+| Example | Description | Projection | Key Functions | Status |
+|---------|-------------|------------|---------------|--------|
+| **sat_ex1** | Global SST, Nov 1999 — the month the original mapped | Hammer-Aitoff | `m_pcolor`, `m_coast`, `m_grid` | ✓ real OISST v2 |
+| **sat_ex2** | Arctic sea-ice concentration, Sep 2012 (record minimum) | Azimuthal Equal-Area | `m_pcolor`, `m_coast`, `m_grid` | ✓ real OISST v2 `icec` |
+| **sat_ex3** | Aerial photo on UTM grid | UTM | — | ✗ **removed** — no open source; `m_image` on UTM is covered by example 18 |
+| **sat_ex4** | NE Pacific SST anomaly, "the Blob" (repurposed from ocean colour) | Lambert Conformal Conic | `m_contourf`, `m_coast`, `m_grid`, `m_contfbar` | ✓ real OISST v2 anomaly |
+| **sat_ex5** | Meteorological data — wind barbs | Miller cylindrical | `m_coast`, `m_contourf`, `m_windbarb`, `m_grid`, `m_contfbar`, `m_colmap` | ✓ real NCEP reanalysis |
+| **sat_ex6** | ARGO drifter tracks | Lambert | `m_etopo2`, `m_gshhs_l`, `m_grid`, `m_vec`, `m_line`, `m_idist`, `m_fdist`, `m_contfbar` | ~ synthetic tracks (the Argo global index is 315 MB) |
+| **sat_ex7** | SAR image of internal waves | Lambert | — | ✗ **removed** — no open source; ruler-box `m_pcolor` is covered by sat_ex5 |
+| **sat_ex8** | Barkley Sound shaded relief + filled contours | Equidistant cylindrical | `m_shadedrelief`, `m_contourf`, `m_contfbar`, `m_colmap` | ✓ but **skips** without a local DEM |
 | **sat_ex9** | Google Maps Static API overlay | Mercator | `m_image`, `m_grid`, `m_ruler` | ✗ skip — Google Static Maps API deprecated |
 
 ---
@@ -225,14 +288,17 @@ m_map documentation lists 21 projections; the 7 not yet ported are:
 - **Full-world pseudocylindrical patch**: each land polygon ring is split at the cut meridian via `_split_ring_at_cut` before projecting. Boundary vertices are offset ±0.01° from the exact cut so each sub-ring projects to its own edge of the map (see Architectural Notes). No Shapely clipping needed; latitude AABB rejection still applied.
 
 ### `elevation.py`
-- `m_elev(mode, levels, upsample, **kwargs)` — loads `m_topo.mat` from `../m_map/private/`; modes: `'contourf'`, `'contour'`, `'shadedrelief'`, `'image'`; optional bicubic upsampling via `scipy.interpolate.RectBivariateSpline`
+- `m_elev(mode, levels, upsample, **kwargs)` — modes: `'contourf'`, `'contour'`, `'shadedrelief'`, `'image'`; optional bicubic upsampling via `scipy.interpolate.RectBivariateSpline`
+- **Topography source changed.** It used to load `m_topo.mat` from `../m_map/private/`, i.e. from a MATLAB m_map installation beside the source tree — so it was dead for anyone who installed the wheel. It now reads `data/topo_1deg.npz`, bundled in the package (108 KB), produced by block-averaging ETOPO1 to 1°. Cross-checked against `m_topo.mat`: mean difference +0.3 m, RMS 8.0 m, correlation 1.00000, land/ocean sign agreement 99.95 % — interchangeable in practice.
+- The bundled grid is preferred **even when `m_topo.mat` is present**, so the same code gives the same figure on every machine. `PY_M_MAP_TOPO_FILE` overrides it with a 180×360 `.npz` or `.mat` for exact MATLAB parity.
 - **Longitude wrap-around padding**: for full-global coverage (radius ≥ 359°), `_extract_topo` pads one wrap-around column at each end (`lons[-1]+1` → copy of first column; `lons[0]-1` → copy of last column) so that `RegularGridInterpolator` queries near ±180° never return NaN.
 
 ### `etopo.py`
-- `m_etopo2(mode, levels, **kwargs)` — reads `etopo1_ice_g_i2.bin` (1 arc-minute, little-endian int16) from `../../databases/etopo1_ice_g_i2/etopo1_ice_g_i2.bin`
+- `m_etopo2(mode, levels, **kwargs)` — reads `etopo1_ice_g_i2.bin` (1 arc-minute, little-endian int16), located via `_data.py` rather than a fixed relative path
 - Constants: `_NX=21600`, `_NY=10800`, `_PTSPERLINE=21601` (grid-referenced), `_DECMAX=800`
 - Row-by-row binary read with seek; decimation to ≤800 pts/axis; sorted column output (fixes prime-meridian wrap)
-- Falls back to `m_elev` with warning when binary absent
+- Falls back to `m_elev` with a warning naming every path searched when the binary is absent
+- **Antimeridian straddle**: the two-piece read is selected by testing the column indices *before* the modulo wrap. Testing afterwards can never fire (a modulo result is always in `[0, _NX)`), which left the straddle branch as dead code and handed the contiguous branch a negative array width — see REVIEW.md H2.
 
 ### `shaded_relief.py`
 - `m_shadedrelief(lon, lat, Z, **kwargs)` — lighting via complex gradient rotation; tanh saturation; true-colour RGB image via `imshow`
@@ -333,7 +399,8 @@ m_map documentation lists 21 projections; the 7 not yet ported are:
 - `m_title(text, ax=None, **kwargs)` — wrapper around `ax.set_title()` that reads `state.title_y` (set by `m_grid` after a fancy box) and passes it as the default `y` parameter; falls back to `y=1.0` when no fancy box has been drawn; use in place of `ax.set_title()` whenever `box='fancy'` is active to ensure the title clears the outer ruler border at any figure size
 
 ### `pcolor.py`
-- `m_pcolor(lon, lat, data, **kwargs)` — projects a geographically gridded lon/lat array with `m_ll2xy(clip='off')`, then calls `ax.pcolormesh`. Handles antimeridian jumps (NaN breaks at |Δx| > 50% map width). Supports `shading` kwarg; default is `'auto'`. Used for continuous or colourmap-stepped scalar fields (e.g. delta-SA, sin(lat)).
+- `m_pcolor(lon, lat, data, **kwargs)` — projects a geographically gridded lon/lat array, then calls `ax.pcolormesh`. Handles antimeridian jumps (|Δx| > 50 % map width). Supports `shading` kwarg; default is `'auto'`, which treats same-shaped coordinates as cell **centres**.
+- **Off-map cells are drawn transparent, via a per-cell `alpha` array** — not merely set to NaN. NaN routes them through the colormap's "bad" colour, which is the same channel the caller's own missing data uses: with an opaque `set_bad` every off-map cell is painted too, and a call whose data lies entirely off the map covers the whole figure. Note that masking the *coordinates* instead is not an option — matplotlib rejects non-finite or masked coordinates in `pcolormesh` outright. No alpha array is attached when nothing is clipped, so unaffected figures are untouched. See REVIEW.md M9.
 
 ### `image.py`
 - `m_image(lon, lat, img, **kwargs)` — places an RGB or RGBA raster image on the map using `ax.imshow` with the correct `extent` in projected coordinates. For cylindrical projections the extent is computed directly from projected corners; for other projections a grid-warp approach is used.
@@ -354,9 +421,65 @@ Azimuthal Equidistant, Gnomonic, Satellite (perspective), Transverse Mercator, G
 
 MATLAB `m_etopo2` supports five modes: `'contourf'`, `'contour'`, `'pcolor'`, `'image'`, `'shadedrelief'`. Python `etopo.py` implements `'contourf'`, `'contour'`, and `'shadedrelief'` only. The `'pcolor'` and `'image'` modes are not yet implemented; `m_elev` covers both as a fallback.
 
-### Thin unit test coverage
+### Test coverage — two layers, and what neither covers
 
-Testing is mostly integration-only: one script per example, rendering a PNG without asserting anything about it. `tests/test_regressions.py` (added 2026-08-05) adds ~30 assertion-based tests covering the defects found in the code review — projection round-trips, state leakage between `m_proj` calls, land masking with polygon holes, ETOPO1 antimeridian reads, colourbar discrete/continuous selection, and fancy-box corner logic. Beyond those, individual functions still lack unit tests, and there is no pixel-level regression baseline for the example figures, so a change that silently alters a rendered map will not be caught automatically.
+`tests/test_regressions.py` holds 57 assertion-based tests, one per defect found in
+the code review: projection round-trips, state leakage between `m_proj` calls, land
+masking with polygon holes, ETOPO1 antimeridian reads, colourbar discrete/continuous
+selection, `m_pcolor` clipping, and the tick-label placement rules for circular,
+pseudocylindrical and ruler-box frames.
+
+`tests/conftest.py` adds an image baseline: every PNG an example writes is compared
+against `tests/baseline/` at **zero** pixel tolerance, with a
+baseline/current/difference panel written on failure. Regenerate with
+`PY_M_MAP_UPDATE_BASELINE=1 pytest tests -q`; skip with `PY_M_MAP_SKIP_BASELINE=1`.
+
+That guard has earned its place — it caught five regressions introduced *while*
+fixing the reviewed defects, every one of which the assertion tests passed.
+
+What is still not covered:
+
+- The 27 example scripts themselves assert nothing beyond "savefig did not raise";
+  the baseline comparison is what makes them meaningful, and it is stack-specific.
+- Individual functions in `colormaps.py`, `hatch.py`, `windrose.py`, `windbarb.py`
+  and `decorations.py` have no unit tests. **Vector rotation in particular**
+  (`m_quiver`, `m_vec`, `m_windbarb`) has no numerical test that a northward vector
+  plots as north on a conic or stereographic projection — a plausible-looking wrong
+  answer would pass.
+- The baseline cannot run in CI while the GSHHS download URL returns 404: a clean
+  runner omits those coastlines, so the comparison would fail on data availability.
+  It is a local pre-release gate.
+
+### Lakes are masked but not rendered
+
+`m_landmask` handles polygon interior rings correctly, so enclosed water (the
+Caspian, lakes) is no longer reported as land. `m_coast` still *fills* them with the
+land colour. Fixing the drawing needs a shared compound-`PathPatch` helper adopted
+by all four `_draw_patch*` functions, with interior rings carried through
+`_split_ring_at_cut` — the antimeridian cases are the hard part. Numerical results
+are correct; this is cosmetic. (REVIEW.md M4.)
+
+### Parameters accepted but not implemented
+
+`xticklabels` / `yticklabels` honour only whether labels are drawn — custom label
+*text* is discarded. `xlabeldir` is accepted and never read. Both now emit a
+`UserWarning` rather than failing silently, and the docstrings say so. Implementing
+them means threading a label sequence through all five projection renderers, and for
+circular frames "tick order" is not well defined where labels sit at boundary
+intersections.
+
+### Not typed
+
+No public function has a fully annotated signature (12 of 41 have no parameter
+annotations at all; 20 declare a return type). No `py.typed` marker is shipped —
+adding one would promise typing the package does not have. Annotate the public API
+first.
+
+### GSHHS data source is broken upstream
+
+The URL `m_gshhs` uses via cartopy returns 404, so coastlines are silently omitted
+with a warning on any machine without a cached copy. This affects examples 9, 10, 12,
+16, 17, 18 and sat_ex6, and is why the image baseline cannot run in CI.
 
 ### Geomagnetic coordinate support absent
 
@@ -392,13 +515,18 @@ Unlocks example 13 and sat_ex6.
 | `m_fdist` | `m_fdist.m` | forward geodesic: endpoint given start + azimuth + distance (pyproj.Geod) |
 | `m_xydist` | `m_xydist.m` | great-circle distances from map coordinates via inverse projection + `m_lldist` |
 
+> The phase list below is kept as history. Some entries refer to satellite examples
+> that were later removed (sat_ex3, sat_ex7) — see the satellite examples table.
+
 ### ~~Phase 6 — `m_pcolor` (`pcolor.py`)~~ ✓ Complete
 
-Unlocks examples 15, sat_ex1, sat_ex4, sat_ex7.
+Unlocked examples 15, sat_ex1, sat_ex4 (and sat_ex7, since removed).
 
 ### ~~Phase 7 — `m_image` (`image.py`)~~ ✓ Complete
 
-Unlocks sat_ex2, sat_ex3, sat_ex9 (partial).
+Unlocked sat_ex2 and sat_ex9 (partial), plus sat_ex3, since removed. Note sat_ex2
+now uses `m_pcolor` on a geographic grid rather than `m_image` on EASE-Grid
+coordinates.
 
 ### ~~Phase 8 — Elevation image mode (`elevation.py`)~~ ✓ Complete
 
@@ -436,35 +564,28 @@ Low priority; needed for completeness.  Functions marked **trivial** are thin wr
 | `m_ellipse` | Medium | Tidal ellipses at map positions — requires rotation to local north |
 | `m_scale` | — | Likely duplicate of `m_ruler`; verify against MATLAB before porting |
 
-### ~~Phase 14 — Satellite example tests~~ ✓ In progress
+### ~~Phase 14 — Satellite example tests~~ ✓ Complete
 
-Test scripts for all unblocked satellite examples have been written. All currently run against synthetic data; each will be updated to use real data when files become available.
+Rebuilt on real, openly available NOAA data rather than synthetic stand-ins; see the
+satellite examples table above. `sat_ex3` and `sat_ex7` were removed, `sat_ex4` was
+repurposed to an SST anomaly (no open ocean-colour product exists), and `sat_ex6`
+keeps synthetic float tracks because the Argo global index is 315 MB.
 
-| Test | Key functions exercised | Status |
-|------|------------------------|--------|
-| `test_sat_ex1.py` | `m_pcolor`, `m_coast`, `m_grid` — global SST | ~ pending real AVHRR SST HDF |
-| `test_sat_ex2.py` | `m_image`, `m_coast`, `m_grid` (azimuthal equal-area) — sea-ice | ~ pending real SSM/I EASE-Grid HDF |
-| `test_sat_ex3.py` | `m_image`, `m_grid` (UTM) — aerial photo | ~ pending real georeferenced JPEG |
-| `test_sat_ex4.py` | `m_pcolor`, `m_gshhs_i`, `m_grid` — ocean colour chlorophyll | ~ pending real SeaWiFS/MODIS HDF |
-| `test_sat_ex6.py` | `m_etopo2`, `m_gshhs_l`, `m_vec`, `m_line`, `m_idist`, `m_fdist`, `m_contfbar` — ARGO track | ~ pending real ARGO netCDF |
-| `test_sat_ex7.py` | `m_pcolor`, `m_grid`, `m_ruler` (UTM) — SAR internal waves | ~ pending real ERS-1 SAR HDF-5 |
-| `test_example20.py` | `m_colmap` gallery — all colourmap names displayed side by side | ✓ complete |
-| `test_example19.py` | `m_windrose`, oblique Mercator, `m_contfbar`, `m_colmap('jet')` — Strait of Georgia wind roses | ✓ complete |
+### ~~Phase 15 — Unit test suite~~ ✓ Largely complete
 
-### Phase 15 — Unit test suite
+`tests/test_regressions.py` (57 tests) plus the image baseline in `conftest.py`.
+Progress against the original targets:
 
-No blocking examples depend on this, but the audit identified it as a significant gap.  All current testing is integration-only (one script per example); there are no unit tests for individual functions.
+| Target | Status |
+|--------|--------|
+| `projection.py` | ✓ round-trips for lambert/albers/oblique, scalar and array input, clip paths, state-leak guards |
+| `geodesic.py` | ~ exercised indirectly (`m_lldist` checked against 111.32·cos φ); no dedicated table of known geodetic values |
+| `coast.py` | ✓ polygon holes (`m_landmask`); antimeridian and back-hemisphere logic still untested directly |
+| `grid.py` | ✓ label placement for circular / pseudocylindrical / ruler-box corners; `_nice_ticks` output still untested |
+| `colormaps.py` | ✗ not started |
+| `hatch.py` | ✗ not started |
 
-Priority targets for unit testing:
-
-| Target | What to test |
-|--------|-------------|
-| `projection.py` | Forward/inverse round-trip for all 13 projections; clip='on'/'off'/'patch' edge cases |
-| `geodesic.py` | `m_lldist`/`m_idist`/`m_fdist` against known geodetic values |
-| `coast.py` | Antimeridian NaN break; back-hemisphere clipping; cut-meridian ring-splitting |
-| `grid.py` | `_nice_ticks` output; fancy-box alternation counter; tick-label formatting |
-| `colormaps.py` | All named colormaps return arrays of correct shape |
-| `hatch.py` | Speckle clipping to map bounds |
+Highest-value remaining gap is **vector rotation** — see Known Limitations.
 
 ### Probably not worth porting
 
@@ -550,6 +671,47 @@ Library functions pin map-frame elements to explicit zorders so they always sit 
 
 Caller code should not need to pass explicit `zorder` for standard usage; any layer that must always sit above the frame should set its own default in the library function.
 
-### Circular Grid Labels (boundary-intersection approach)
+### Tick Label Placement on Non-Rectangular Frames
 
-For circular maps (orthographic, stereographic), labels are placed where gridlines cross the map boundary circle. For each meridian, the bottom-most projected point inside the circle is found (minimum projected y); for each parallel, the left-most point (minimum projected x). The label is placed just outside the boundary circle in the radial direction of that point. A threshold of `r > 0.65·R` filters gridlines that don't reach the boundary. This works identically for full-hemisphere and zoomed views.
+This was the weakest area of the codebase; six separate defects (REVIEW.md M10-M15)
+all traced to one mistake, worth stating plainly because it is easy to repeat:
+
+> **Labels were positioned at an extremum of the projected boundary** —
+> bottom-most for a meridian, left-most for a parallel — **which is only well
+> defined when that boundary is a rectangle.** On a circle the extremum is a single
+> point many gridlines share; on a pseudocylindrical outline it is a pole where
+> every meridian converges.
+
+**Circular maps** (orthographic, stereographic, azimuthal). Labels go where
+gridlines cross the boundary circle: for each meridian the bottom-most inside point,
+for each parallel the left-most. Then:
+
+- Placement is **radial, and the text is horizontal** — not tangential. A tangent is
+  forced to exactly ±90° at the left and right extremes, and normalising into
+  (−90°, 90°] cannot reconcile them: one side reads bottom-to-top and the other
+  top-to-bottom, so one looks inverted. No rotation rule is both continuous around
+  the circle and never upside-down. Clearance from the boundary comes from anchoring
+  (`ha='right'` at the left edge, `va='bottom'` at the top) instead.
+- The "reaches the boundary" filter is `r > 0.9·R`, **not 0.65**. Every meridian
+  converges at the poles, so a meridian on the invisible hemisphere still shows a
+  sliver when a pole is in view, and its lowest visible point is that pole. Measured
+  for `ortho(48N, 123W)`: genuine limb crossings bottom out at r/R = 0.996-1.001,
+  far-side meridians at 0.672. 0.65 let all of them through and stacked four labels
+  on the pole. Note the *fraction of visible track* does **not** separate the two
+  populations (0.25-0.35 against 0.47-0.73) — the radius does.
+- Labels keep **their own radius**; they are not snapped to the boundary circle.
+  Snapping collapses every parallel along one meridian onto the same point.
+- Longitude ticks are deduplicated modulo 360° (±180° is one meridian).
+- Latitude labels that would collide with an already-placed label **slide along
+  their own parallel** to the first clear point, which keeps them on the line they
+  name. `lat_label_lon` overrides the choice of meridian; its default is the
+  left-most point, *not* `center_lon + 90°` as once documented.
+
+**Pseudocylindrical maps.** Longitude labels go where each meridian crosses the
+parallel chosen by `xaxislocation` (which must be forwarded — it was silently
+ignored for this family). Whether the bottom edge can carry labels depends on the
+projection, so it is decided by **measuring the projected spacing**, not by the
+projection name or by the latitude being near ±90°: Hammer, Mollweide and sinusoidal
+converge to a point at the poles and fall back to the middle of the latitude range
+(the equator on a whole-world map, matching m_map's `m_grid('xaxis','middle')`),
+while Robinson has a pole *line* and keeps its bottom labels.

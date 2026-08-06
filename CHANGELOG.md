@@ -98,7 +98,7 @@ boundary (bottom-most, left-most), which is only well defined for a rectangle.
 
 ### Added
 
-- `tests/test_regressions.py` — 48 assertion-based tests, one per defect above.
+- `tests/test_regressions.py` — 57 assertion-based tests, one per defect above.
   The pre-existing example tests contain no assertions at all.
 - An image-baseline check in `tests/conftest.py`: every PNG an example writes is
   compared against `tests/baseline/` at zero pixel tolerance, with a

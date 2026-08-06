@@ -603,6 +603,13 @@ been unreliable.
   since `packages.find` auto-discovers).
 - **L5** — `IMPLEMENTATION_PLAN.md` claims cartopy is declared (it is not) and
   still lists "No unit test suite" under Known Limitations despite `tests/`.
+  **Fixed**, and the whole document was re-audited on 2026-08-06 — the drift was
+  far wider than this finding suggested. It still listed a `coordinates.py` that was
+  never written, omitted `_data.py` and the bundled topography, described `m_elev`
+  as reading `m_topo.mat` from a MATLAB installation, documented the superseded
+  0.65·R circular-label threshold, and carried `xarray` as a core dependency with a
+  purpose it never served. Every factual claim in it was then checked against the
+  code programmatically rather than by reading.
 - **L6** — No `README`, no `.gitignore`; `Py_M_Map.zip`, `.DS_Store` files and
   `.pytest_cache/` are committed in the tree.
 
