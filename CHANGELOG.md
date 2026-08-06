@@ -70,15 +70,29 @@ boundary (bottom-most, left-most), which is only well defined for a rectangle.
   bottom labels while Hammer and Mollweide use the equator.
 - Orthographic maps labelled meridians on the invisible hemisphere, stacking them
   on the visible pole, and labelled ±180° twice.
+- Ruler-box (`boxstyle='line'`) corners ignored whether a tick lands on them. The
+  rule has two branches whose condition inverts: with a tick the corner is delimited
+  and takes a half-line when the neighbouring strip is *empty*; without one the
+  neighbour's style continues into the corner, so the line is drawn when that strip
+  is *full*. Applying the "empty" condition everywhere was right only at corners
+  where ticks land on both edges.
 
 ### Changed
 
 - **Distribution.** Added `LICENSE` (MIT), `README.md`, `CHANGELOG.md`,
   `.gitignore` and `MANIFEST.in`; filled in author, licence, readme, keywords,
-  classifiers and a `test` extra. `cartopy` is now declared — it was imported at
-  runtime by `m_coast`, `m_gshhs*` and `m_usercoast` but absent from the
-  dependencies, so an installed package could not draw a coastline. matplotlib is
-  floored at 3.5 for per-cell alpha support.
+  classifiers, project URLs and a `test` extra. matplotlib is floored at 3.5 for
+  per-cell alpha support.
+- **Dependencies corrected.** `cartopy` was imported at runtime by `m_coast`,
+  `m_gshhs*` and `m_usercoast` but absent from the dependency list, so an installed
+  package could not draw a coastline — now declared. Conversely `xarray` was
+  declared but **never imported by the library**; it moved to the `test` extra,
+  where it needs `netcdf4` alongside it, since xarray cannot open a netCDF file
+  without a backend.
+- **`MANIFEST.in` excludes `tests/baseline/`.** Shipping the 30 reference PNGs made
+  the sdist 12.5 MB, and they are specific to the stack that rendered them — on a
+  different matplotlib they would fail on antialiasing rather than on a real
+  change. Sdist is now 0.30 MB. They remain in the repository as the CI/local gate.
 - **Bundled topography.** `m_elev` previously read `m_topo.mat` from a MATLAB m_map
   installation beside the source tree, so it was dead for anyone who installed the
   wheel. A 108 KB 1° grid derived from ETOPO1 now ships in the package and
@@ -104,11 +118,19 @@ boundary (bottom-most, left-most), which is only well defined for a rectangle.
   compared against `tests/baseline/` at zero pixel tolerance, with a
   baseline/current/difference panel written on failure. This caught two regressions
   introduced while fixing the defects above, both of which the test suite passed.
-- GitHub Actions workflows for the test matrix, the pinned-stack image comparison,
-  and distribution checks.
+- GitHub Actions workflows: a Python 3.10/3.11/3.12 test matrix, distribution checks
+  that catch a missing README or omitted package data, and the pinned-stack image
+  comparison. The image job is **manual-only** — see Known limitations.
+- `sat_ex8` now skips with an explanation when its local DEM is absent, instead of
+  failing. Found by extracting the sdist and running the shipped suite offline.
 
 ### Known limitations
 
+- **GSHHS data is unfetchable upstream** (the URL returns 404), so `m_gshhs` warns
+  and omits coastlines. Examples 9, 10, 12, 16, 17, 18 and sat_ex6 render without
+  their coasts on any machine without a cached copy. This is also why the image
+  comparison cannot run in CI: a clean runner produces different figures from the
+  committed references for a data reason rather than a code one.
 - `m_coast` still fills lakes with the land colour; only the *mask* handles holes.
 - Custom tick label text and `xlabeldir` are unimplemented (they warn).
 - 7 of 21 m_map projections are not ported; see `IMPLEMENTATION_PLAN.md`.

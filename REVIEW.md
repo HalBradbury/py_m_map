@@ -43,7 +43,7 @@ defects were uncovered *while* fixing and verifying these — both are in the li
 | M6 | Oblique divide-by-zero at the equator | **Fixed** |
 | M7 | `shading` docstring backwards | **Fixed** |
 | M8 | No test asserts anything | **Fixed** for the above; examples still assertion-free |
-| L1-L6 | Housekeeping | L2, L3, L5 **fixed**; L1, L4, L6 **open** (cosmetic) |
+| L1-L7 | Housekeeping | L2, L3, L5, L6 **fixed**; L1, L4, L7 **open** (cosmetic) |
 
 **Verification.** The 29 example figures were rendered before and after and
 compared pixel by pixel. 27 are byte-identical. The three that changed are the
@@ -362,6 +362,7 @@ where every meridian converges.
 | M13 | Pseudocylindrical longitude labels all stack at the pole | **Fixed** |
 | M14 | Orthographic labels crowd: far-side meridians, duplicate ±180°, collisions | **Fixed** |
 | M15 | Ruler-box corners ignored whether a tick lands on them | **Fixed** |
+| M16 | GSHHS data source returns 404; coastlines silently omitted | **Open** (upstream) |
 
 Circular and pseudocylindrical tick labels are now verified collision-free across
 orthographic, azimuthal equal-area and stereographic at two cap radii, and spread
@@ -507,6 +508,35 @@ Covered by `test_ruler_box_corner_follows_the_tick_rule`, which pins all eight
 colour/tick combinations plus two mixed cases. Affected `sat_ex5`, `example6` and
 `example15_inverse` — the three figures using this box style.
 
+### M16 — GSHHS data is unfetchable, and a missing coastline is only a warning · **Open (upstream)**
+
+`gshhs.py:86-106`
+
+The GSHHS download URL cartopy uses returns **404**. `m_gshhs` degrades to a
+`UserWarning` and returns an empty list, so the figure renders with its coastlines
+silently omitted — the map still looks like a map, just with no coast. This affects
+examples 9, 10, 12, 16, 17, 18 and sat_ex6.
+
+The original review noted this in passing under "zero assertions" (test_example9
+passed while its download 404'd), but it deserves its own entry: it is the one
+defect that reliably produces a *wrong figure with no failure*, and the code review's
+own test run demonstrated the suite passing on it.
+
+Two consequences worth knowing:
+
+- **The image baseline cannot run in CI.** The committed references were rendered on
+  a machine holding a stale cached copy under
+  `~/.local/share/cartopy/shapefiles/gshhs/`; a clean runner omits those coastlines,
+  so the comparison would fail on data availability. The baseline job is therefore
+  manual-only.
+- **Anyone installing fresh gets coastline-less figures** from those examples, with
+  only a warning to indicate it.
+
+**Fix** is upstream of this project: either cartopy's GSHHS URL is repaired, or
+`m_gshhs` gains its own source. A local mitigation would be to make the failure
+loud — raise rather than warn — but that would break the examples that currently
+"work". Worth deciding deliberately.
+
 ### M12 — Latitude labels collapse onto one radius along an explicit meridian · **Fixed**
 
 `grid.py:_place_label`
@@ -611,7 +641,9 @@ been unreliable.
   purpose it never served. Every factual claim in it was then checked against the
   code programmatically rather than by reading.
 - **L6** — No `README`, no `.gitignore`; `Py_M_Map.zip`, `.DS_Store` files and
-  `.pytest_cache/` are committed in the tree.
+  `.pytest_cache/` are in the tree. **Fixed** — `README.md` and `.gitignore` added,
+  and the repository was initialised with those artefacts excluded (verified against
+  a fresh clone). They remain on disk, deleted from nothing.
 
 ---
 
@@ -651,19 +683,23 @@ In priority order, everything not closed above:
 2. **M1/M2 — custom tick label text and `xlabeldir`.** Features. Decide whether
    they are wanted at all before building them; if not, drop the parameters at
    the next breaking change rather than leaving them to warn forever.
-3. **M8 — assertions in the example tests.** `tests/test_regressions.py` covers
-   the reviewed defects, but the 29 example scripts still assert nothing. The
-   cheapest strong safeguard is a pixel-baseline check: store the current
-   `tests/outputs/*.png` as references and compare with a tolerance, exactly as
-   was done to verify these fixes. That would have caught both regressions I
-   introduced and backed out during this pass.
-4. **L1** — `grid.py`'s `diag_offset_y` is implemented but never invoked with a
+3. ~~**M8 — assertions in the example tests.**~~ **Done.** The 27 example scripts
+   still assert nothing themselves, but `tests/conftest.py` now compares every
+   figure they render against `tests/baseline/` at zero pixel tolerance. It has
+   since caught five regressions introduced while fixing the defects above, every
+   one of which the assertion tests passed. Its one limitation is that it cannot
+   run in CI while GSHHS is unfetchable — see M16.
+4. **Vector rotation has no numerical test.** The largest remaining coverage gap,
+   and the one most likely to hide a wrong scientific figure: nothing checks that
+   `m_quiver` / `m_vec` / `m_windbarb` plot a northward vector as north on a conic
+   or stereographic projection. A wrong answer here looks entirely plausible.
+5. **L1** — `grid.py`'s `diag_offset_y` is implemented but never invoked with a
    non-zero value; either use it or drop it.
-5. **L4** — stale `py_m_map.egg-info/SOURCES.txt` (8 of 27 modules). Harmless,
-   since `packages.find` auto-discovers; regenerate on the next build.
-6. **L6** — no `README`; `Py_M_Map.zip`, `.DS_Store` and `.pytest_cache/` sit in
-   the tree. A `README` explaining the m_map correspondence would help students
-   most.
+6. **L4** — stale `py_m_map.egg-info/SOURCES.txt`. Harmless, since `packages.find`
+   auto-discovers; regenerate on the next build.
+7. **L7** — `m_proj`'s `lon` argument is inconsistent across the pseudocylindrical
+   family (scalar centre for hammer/robinson, explicit range for
+   mollweide/sinusoidal).
 
 ### A note on method
 

@@ -5,14 +5,25 @@ Companion to `REVIEW.md` (code review) — that covered correctness; this covers
 everything else standing between the current tree and a package someone else can
 install and use.
 
-**Where it stands.** The library is in good shape: 28 modules, 41 exported
-functions, 14 projections, and the code review's defects are fixed with a 30-test
-regression suite plus a pixel baseline over all 29 example figures.
+**Where it stands (2026-08-06).** The library is in good shape: 28 modules, 41
+exported functions, 14 projections, and every reviewed defect (M1-M15) is fixed,
+with a 57-test regression suite plus a pixel baseline over all 27 example figures.
+84 tests in total.
 
-**Every blocker below is now closed.** The package installs from a wheel into a
+**Every blocker below is closed**, and the code is published at
+<https://github.com/HalBradbury/py_m_map>. The package installs from a wheel into a
 clean environment and draws a correct map with no data setup at all — verified by
-building, installing into a fresh venv, and rendering from outside the source
-tree. The one substantial piece of work remaining is the example gallery (S1).
+building, installing into a fresh venv, and rendering from outside the source tree.
+
+Two things remain outstanding, neither of them code:
+
+1. **The m_map licence question** (B1) — the only item on this page I cannot close.
+2. **PyPI publication** — the distributions build and pass `twine check`, but the
+   name has not been checked for availability and nothing has been uploaded.
+
+CI is configured and was observed running, but GitHub Actions has been in a
+`major_outage` since 15:22 UTC on 2026-08-06 with push webhooks throttled to ~15 %,
+so recent pushes have not produced runs. Nothing to fix on our side.
 
 Verified during this assessment:
 
@@ -52,10 +63,11 @@ See D1 below for what was implemented.
 
 ### B3. Package metadata was a stub — **done**
 
-`pyproject.toml` now carries `readme`, `license`, `license-files`, `authors`,
-`keywords`, ten `classifiers`, an `[project.optional-dependencies] test` extra,
-and a `[tool.pytest.ini_options]` section. `[project.urls]` is still empty — it
-needs a repository URL, which I do not have (see D3).
+`pyproject.toml` now carries `readme`, `license`, `license-files`, `authors`
+(name and email), `keywords`, ten `classifiers`, `[project.urls]` (homepage,
+repository, issues, changelog, and a link to the original m_map), an
+`[project.optional-dependencies] test` extra, and a `[tool.pytest.ini_options]`
+section.
 
 Worth knowing: setuptools **silently** accepted `readme = "README.md"` while that
 file did not exist, producing a wheel with an empty long_description and no error.
@@ -351,8 +363,17 @@ download URL, and falls back to the bundled 1° grid.
 **D2. Example gallery — decided, not yet built.** Rebuild around real fetchable
 data. See S1 for the plan and the endpoints I verified.
 
-**D3. Still open.** I have not checked whether `py_m_map` is free on PyPI, and
-`[project.urls]` is empty because I do not have a repository URL. `authors` carries
-your email only — add your name if you want it attributed. The `LICENSE` copyright
-line reads "py_m_map contributors" rather than a personal name; change it if you
-prefer.
+**D3. Metadata and repository — done.** Filled in from the local git config once the
+repository existed, so the name was no longer guesswork:
+
+- `authors = [{ name = "Hal Bradbury", email = "hbradbury@eoas.ubc.ca" }]` — the UBC
+  address is the package contact; git commits carry the Cambridge one.
+- `[project.urls]` points at <https://github.com/HalBradbury/py_m_map>.
+- `LICENSE` copyright reads "Hal Bradbury".
+
+Excluded from the repository but left on disk: `Py_M_Map.zip` (a stale snapshot of an
+older revision), `.claude/`, `build/`, `py_m_map.egg-info/`, `.pytest_cache/`,
+`.DS_Store`, and both `outputs/` directories. Verified against a fresh clone that
+none of them landed.
+
+**Still open:** whether `py_m_map` is free on PyPI, and the upload itself.
