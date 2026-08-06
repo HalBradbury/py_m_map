@@ -1,0 +1,28 @@
+# Ship the docs and the test suite in the sdist so the package can be verified
+# from source.  tests/ is not an importable package, so setuptools would
+# otherwise leave it out entirely.
+include README.md
+include LICENSE
+include CHANGELOG.md
+include EXAMPLES.md
+include IMPLEMENTATION_PLAN.md
+include REVIEW.md
+include PUBLISHING.md
+
+recursive-include tests *.py
+
+include py_m_map/data/*.npz
+
+# Never ship rendered output or caches.
+prune tests/outputs
+
+# tests/baseline/ stays in the repository but out of the distribution.  The
+# references are specific to the matplotlib/freetype that rendered them, so for
+# anyone building from an sdist on a different stack they would fail on
+# antialiasing rather than on a real regression — and they are ~12 MB, which is
+# most of the sdist.  Source consumers can still run the functional suite; the
+# image comparison is a repository-and-CI gate.  conftest.py creates a missing
+# reference on first run and says so.
+prune tests/baseline
+global-exclude .DS_Store
+global-exclude *.py[cod]

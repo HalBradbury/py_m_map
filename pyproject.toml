@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "py_m_map"
+version = "0.1.0"
+description = "Python port of the m_map oceanographic mapping toolbox"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Hal Bradbury", email = "hbradbury@eoas.ubc.ca" }]
+keywords = [
+    "oceanography",
+    "mapping",
+    "cartography",
+    "projection",
+    "matplotlib",
+    "m_map",
+    "bathymetry",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Education",
+    "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy",
+    # m_pcolor hides off-map cells with a per-cell alpha array, which needs
+    # Collection.set_alpha to accept an array (matplotlib >= 3.4).  Floor set a
+    # little above that for margin.
+    "matplotlib>=3.5",
+    "pyproj",
+    "shapely",
+    "xarray",
+    "scipy",
+    # Coastline and shapefile loading: m_coast, m_gshhs*, m_usercoast.
+    "cartopy",
+]
+
+[project.urls]
+Homepage = "https://github.com/HalBradbury/py_m_map"
+Repository = "https://github.com/HalBradbury/py_m_map"
+Issues = "https://github.com/HalBradbury/py_m_map/issues"
+Changelog = "https://github.com/HalBradbury/py_m_map/blob/main/CHANGELOG.md"
+"Original m_map (MATLAB)" = "https://www-old.eoas.ubc.ca/~rich/map.html"
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["py_m_map*"]
+
+[tool.setuptools.package-data]
+py_m_map = ["data/*.npz"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    # cartopy's Natural Earth / GSHHS downloads are expected on a cold cache.
+    "ignore::cartopy.io.DownloadWarning",
+]

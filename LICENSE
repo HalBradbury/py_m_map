@@ -1,0 +1,51 @@
+MIT License
+
+Copyright (c) 2026 Hal Bradbury
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+---
+
+ACKNOWLEDGEMENTS AND THIRD-PARTY MATERIAL
+
+py_m_map is an independent Python re-implementation of the m_map mapping
+toolbox for MATLAB by Rich Pawlowicz (Department of Earth, Ocean and
+Atmospheric Sciences, University of British Columbia),
+https://www-old.eoas.ubc.ca/~rich/map.html
+
+The API, function names and figure conventions deliberately follow m_map so that
+existing m_map users and course material carry across. No m_map source code or
+data files are included or redistributed here; the implementation was written
+independently against m_map's documented behaviour. If you use py_m_map in
+published work, please credit m_map as the origin of the design.
+
+Bundled data:
+
+  py_m_map/data/topo_1deg.npz
+      1-degree global topography, produced by block-averaging ETOPO1
+      (ice-surface, grid-registered) to one degree.
+
+      ETOPO1 source: Amante, C. and B. W. Eakins, 2009. ETOPO1 1 Arc-Minute
+      Global Relief Model: Procedures, Data Sources and Analysis. NOAA
+      Technical Memorandum NESDIS NGDC-24. National Geophysical Data Center,
+      NOAA. doi:10.7289/V5C8276M
+
+      As a work of the United States Government, ETOPO1 is not subject to
+      domestic copyright protection.

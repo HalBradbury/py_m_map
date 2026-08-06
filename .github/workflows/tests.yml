@@ -1,0 +1,170 @@
+name: tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Correctness across supported Python versions, against current dependencies.
+  # The rendered-image comparison is skipped here: those references are specific
+  # to the matplotlib/freetype that produced them, so running them against
+  # floating dependencies would fail on antialiasing rather than on a real
+  # regression.  The `baseline` job below pins versions and does check them.
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    env:
+      PY_M_MAP_SKIP_BASELINE: '1'
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # Natural Earth / GSHHS coastlines and the NOAA example fields are fetched
+      # on first use.  Caching them keeps the run quick and avoids hammering the
+      # upstream servers on every push.  PY_M_MAP_FETCH_LARGE is deliberately
+      # unset, so the two 64 MB OISST files are not downloaded and the examples
+      # needing them skip.
+      - name: Cache downloaded data
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.py_m_map
+            ~/.local/share/cartopy
+          key: pymmap-data-${{ runner.os }}-v1
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+
+      - name: Show versions
+        run: |
+          python -c "import matplotlib, numpy, pyproj, shapely, cartopy, scipy, xarray; \
+            [print(m.__name__, m.__version__) for m in \
+             (matplotlib, numpy, pyproj, shapely, cartopy, scipy, xarray)]"
+
+      - name: Run tests
+        run: pytest tests -q --durations=10
+
+  # Rendered-output comparison, on the exact stack that produced the references
+  # in tests/baseline/.  Regenerate them with
+  #   PY_M_MAP_UPDATE_BASELINE=1 pytest tests -q
+  # and commit the change alongside whatever made the figures move.
+  baseline:
+    runs-on: ubuntu-latest
+    env:
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Cache downloaded data
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.py_m_map
+            ~/.local/share/cartopy
+          key: pymmap-data-${{ runner.os }}-v1
+
+      - name: Install with pinned rendering stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+          # Versions the committed baselines were rendered with.
+          python -m pip install 'matplotlib==3.10.8' 'numpy==2.4.3'
+
+      - name: Run tests with image comparison
+        run: pytest tests -q
+
+      # On failure the fixture writes a baseline/current/difference panel per
+      # figure, which is far more use than the log line.
+      - name: Upload difference images
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-diffs
+          path: tests/outputs/_baseline_diffs/
+          if-no-files-found: ignore
+
+  # Catch packaging faults that only show up in a built distribution — a missing
+  # README (which setuptools accepts silently, leaving an empty long_description),
+  # data files left out of the wheel, or an sdist that cannot be tested.
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Build wheel and sdist
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+
+      - name: Validate metadata
+        run: python -m twine check dist/*
+
+      - name: Assert the distributions carry what they must
+        run: |
+          python - <<'PY'
+          import glob, tarfile, zipfile
+
+          wheel = glob.glob('dist/*.whl')[0]
+          names = zipfile.ZipFile(wheel).namelist()
+          meta = next(n for n in names if n.endswith('METADATA'))
+          text = zipfile.ZipFile(wheel).read(meta).decode()
+
+          assert 'py_m_map/data/topo_1deg.npz' in names, 'bundled topography missing'
+          assert any('LICENSE' in n for n in names), 'licence missing from wheel'
+
+          # setuptools accepts a readme pointing at a file that does not exist and
+          # silently produces an empty long_description, so check the body.
+          body = text.split('\n\n', 1)[1] if '\n\n' in text else ''
+          assert len(body) > 500, f'long_description looks empty ({len(body)} chars)'
+
+          sdist = glob.glob('dist/*.tar.gz')[0]
+          entries = [n.split('/', 1)[-1] for n in tarfile.open(sdist).getnames()]
+          for required in ('README.md', 'LICENSE', 'tests/conftest.py',
+                           'tests/test_regressions.py',
+                           'py_m_map/data/topo_1deg.npz'):
+              assert required in entries, f'{required} missing from sdist'
+          print('distribution contents OK')
+          PY
+
+      - name: Import the installed wheel from outside the source tree
+        run: |
+          python -m pip install dist/*.whl
+          cd /tmp
+          python -c "
+          import matplotlib; matplotlib.use('Agg')
+          import py_m_map as mm
+          print('py_m_map', mm.__version__, 'exports', len(mm.__all__), 'names')
+          # m_elev must work with no data setup, from the bundled grid.
+          import matplotlib.pyplot as plt
+          plt.subplots()
+          mm.m_proj('lambert', lon=[-135, -120], lat=[47, 56])
+          h = mm.m_elev('contourf')
+          assert len(h.levels) > 1
+          print('m_elev from bundled data: OK')
+          "
