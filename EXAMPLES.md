@@ -2,7 +2,11 @@
 
 Python port of Rich Pawlowicz's [M_Map](https://www-old.eoas.ubc.ca/~rich/map.html) MATLAB toolbox.
 Each example below reproduces the corresponding M_Map gallery figure using the `py_m_map` API.
-All output images are saved to `tests/outputs/`.
+
+Running the suite writes freshly rendered figures to `tests/outputs/`, which is not
+tracked by git. The images shown below are therefore the committed reference copies
+in `tests/baseline/` — the same figures, and the ones the test suite compares each
+run against.
 
 ---
 
@@ -16,7 +20,7 @@ m_coast('patch', 'r')
 m_grid(linestyle='-', xticklabels=False, yticklabels=False)
 ```
 
-![Example 1](tests/outputs/example1.png)
+![Example 1](tests/baseline/example1.png)
 
 ---
 
@@ -32,7 +36,7 @@ m_elev('contourf', np.arange(500, 6001, 500), cmap='copper_r')
 m_grid(box='fancy', tickdir='in')
 ```
 
-![Example 2](tests/outputs/example2.png)
+![Example 2](tests/baseline/example2.png)
 
 ---
 
@@ -48,7 +52,7 @@ m_grid(xtick=30, tickdir='out', ytick=[70, 80], linest='-')
 m_coast('patch', [0.7, 0.7, 0.7], edgecolor='r')
 ```
 
-![Example 3](tests/outputs/example3.png)
+![Example 3](tests/baseline/example3.png)
 
 ---
 
@@ -71,7 +75,7 @@ for lons, lats in zip(mlongs, mlats):
     m_coast('patch', [0.6, 0.6, 0.6])
 ```
 
-![Example 4](tests/outputs/example4.png)
+![Example 4](tests/baseline/example4.png)
 
 ---
 
@@ -95,7 +99,7 @@ cs = m_contour(lon, lat, speed)
 plt.clabel(cs, fontsize=8)
 ```
 
-![Example 5](tests/outputs/example5.png)
+![Example 5](tests/baseline/example5.png)
 
 ---
 
@@ -112,7 +116,7 @@ m_grid(linestyle='none', box='fancy', boxstyle='line', tickdir='out')
 m_northarrow(-150, 0, 40, type=4, linewi=0.5)
 ```
 
-![Example 6](tests/outputs/example6.png)
+![Example 6](tests/baseline/example6.png)
 
 ---
 
@@ -128,7 +132,7 @@ m_grid(linestyle='none', tickdir='out', linewidth=3)
 cbar_ax, cb = m_contfbar(1.12, [.5, .8], levels, levels, colormap=cmap)
 ```
 
-![Example 7](tests/outputs/example7.png)
+![Example 7](tests/baseline/example7.png)
 
 ---
 
@@ -149,7 +153,7 @@ m_vec(100, vlon, vlat, uu, vv, 'm', shaftwidth=0.2, headlength=2.5, curvature=30
 m_vec(100, [-115], [38], [50], [0], 'b', key='50 cm s$^{-1}$')
 ```
 
-![Example 8](tests/outputs/example8.png)
+![Example 8](tests/baseline/example8.png)
 
 ---
 
@@ -172,7 +176,7 @@ mm.m_gshhs_l('patch', [0.4, 0.6, 0.4])     # GSHHS low
 mm.m_ruler([0.30, 0.70], 0.90, nbar=4, fontsize=6)
 ```
 
-![Example 9](tests/outputs/example9.png)
+![Example 9](tests/baseline/example9.png)
 
 ---
 
@@ -191,7 +195,7 @@ mm.m_track(lons, lats, navtimes, ticks=0, times=4, dates=8,
 mm.m_northarrow(-68.5, 43.4, 0.4, type=2)
 ```
 
-![Example 10](tests/outputs/example10.png)
+![Example 10](tests/baseline/example10.png)
 
 ---
 
@@ -208,7 +212,7 @@ mm.m_line(100.5, 13.5, marker='s', color='r', linestyle='none')
 mm.m_range_ring(100.5, 13.5, np.arange(1000, 16000, 1000), color='b')
 ```
 
-![Example 11](tests/outputs/example11.png)
+![Example 11](tests/baseline/example11.png)
 
 ---
 
@@ -228,7 +232,7 @@ mm.m_text(-128, 48, ['Pacific', 'Ocean'], fontsize=18)
 mm.m_northarrow(-122.5, 50.2, 0.8, type=3, linewi=2)
 ```
 
-![Example 12](tests/outputs/example12.png)
+![Example 12](tests/baseline/example12.png)
 
 ---
 
@@ -249,7 +253,7 @@ for k in range(3):
     mm.m_text(ln[0, -1], lt[0, -1], f'{cities[k]} — {round(dist[0])} km')
 ```
 
-![Example 13](tests/outputs/example13.png)
+![Example 13](tests/baseline/example13.png)
 
 ---
 
@@ -274,7 +278,7 @@ mm.m_elev('image', cmap=cmap_combined, vmin=-7000, vmax=5000)
 mm.m_elev('shadedrelief', colormap=cmap_blues)
 ```
 
-![Example 14](tests/outputs/example14_one_ocean.png)
+![Example 14](tests/baseline/example14_one_ocean.png)
 
 ---
 
@@ -291,7 +295,7 @@ mm.m_grid(tickdir='out', linewidth=2)
 h.set_cmap(mm.m_colmap('jet', 'step'))
 ```
 
-![Example 15](tests/outputs/example15.png)
+![Example 15](tests/baseline/example15.png)
 
 ---
 
@@ -311,7 +315,7 @@ mm.m_grid(box='fancy', boxstyle='line', tickdir='out')
 cbar_ax, cb = mm.m_contfbar([0.475, 0.725], 0.82, ...)
 ```
 
-![Example 16](tests/outputs/example16.png)
+![Example 16](tests/baseline/example16.png)
 
 ---
 
@@ -328,7 +332,7 @@ mm.m_grid(linestyle='-', tickdir='out', box='fancy')
 cbar_ax, cb = mm.m_contfbar(1.08, [0.15, 0.90], ...)
 ```
 
-![Example 17](tests/outputs/example17.png)
+![Example 17](tests/baseline/example17.png)
 
 ---
 
@@ -350,7 +354,7 @@ mm.m_ruler([0.5, 0.78], 0.9)
 mm.m_northarrow(lon, lat, scale, type=4, aspect=1.5)
 ```
 
-![Example 18](tests/outputs/example18.png)
+![Example 18](tests/baseline/example18.png)
 
 ---
 
@@ -371,7 +375,7 @@ mm.m_grid(tickdir='out', linestyle='none')
 cbar_ax, cb = mm.m_contfbar(1.07, [0.1, 0.9], levels, levels, colormap=cmap)
 ```
 
-![Example 19](tests/outputs/example19.png)
+![Example 19](tests/baseline/example19.png)
 
 ---
 
@@ -386,7 +390,7 @@ cmap = mm.m_colmap('jet', 'step')               # banded / stepped
 cmap = mm.m_colmap('jet', n, ncol)              # n discrete colours
 ```
 
-![Example 20](tests/outputs/example20.png)
+![Example 20](tests/baseline/example20.png)
 
 ---
 
@@ -416,7 +420,7 @@ mm.m_coast('patch', color=[0.6, 1, 0.6])
 mm.m_grid(xaxislocation='middle')
 ```
 
-![Satellite Example 1](tests/outputs/sat_ex1.png)
+![Satellite Example 1](tests/baseline/sat_ex1.png)
 
 ---
 
@@ -434,7 +438,7 @@ mm.m_coast('patch', color=[0.2, 0.5, 0.2], edgecolor='k')
 mm.m_grid(tickdir='out', linewidth=1.0)
 ```
 
-![Satellite Example 2](tests/outputs/sat_ex2.png)
+![Satellite Example 2](tests/baseline/sat_ex2.png)
 
 ---
 
@@ -454,7 +458,7 @@ mm.m_grid(box='fancy', tickdir='out')
 cbar_ax, _ = mm.m_contfbar([0.25, 0.75], -0.10, anomaly, levels)
 ```
 
-![Satellite Example 4](tests/outputs/sat_ex4.png)
+![Satellite Example 4](tests/baseline/sat_ex4.png)
 
 ---
 
@@ -473,7 +477,7 @@ mm.m_grid(box='fancy', tickdir='out')
 cbar_ax, cb = mm.m_contfbar([0.3, 0.7], 0.05, cs, cs)
 ```
 
-![Satellite Example 5](tests/outputs/sat_ex5.png)
+![Satellite Example 5](tests/baseline/sat_ex5.png)
 
 ---
 
@@ -493,7 +497,7 @@ for flt in floats:
     mm.m_vec(vecscl, mid_lon, mid_lat, dx, dy, 'r', shaftwidth=2)
 ```
 
-![Satellite Example 6](tests/outputs/sat_ex6.png)
+![Satellite Example 6](tests/baseline/sat_ex6.png)
 
 ---
 
@@ -533,4 +537,4 @@ mm.m_shadedrelief(lon, lat, Z, colormap=cmap)
 mm.m_grid(box='fancy', grid='none', fontsize=14)
 ```
 
-![Satellite Example 8](tests/outputs/sat_ex8.png)
+![Satellite Example 8](tests/baseline/sat_ex8.png)
