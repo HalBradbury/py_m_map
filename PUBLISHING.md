@@ -226,6 +226,41 @@ NCEP files are cached between runs.
 The YAML was validated and every non-trivial step was run locally rather than
 trusted to a first push. That is how the two faults in S5 were found.
 
+### S6. Faults the first CI run found — **fixed**
+
+Two more that only a clean machine could expose. Both are the same species as S5:
+something my environment supplied that a fresh install does not.
+
+- **xarray could not open any netCDF file.** `test_sat_ex5` failed with
+  *"found the following matches with the input file in xarray's IO backends:
+  ['netcdf4', 'h5netcdf']. But their dependencies may not be installed"*. xarray on
+  its own cannot read netCDF — it needs a backend. My conda environment has
+  netCDF4 1.7.2 already, so this never surfaced locally.
+
+  Fixing it exposed a second thing: **nothing in `py_m_map` imports xarray at
+  all.** It was declared as a core dependency for netCDF elevation loading that
+  `m_elev` never does — it reads the bundled `.npz` through numpy, and `m_etopo2`
+  reads a raw binary. Only the example scripts read netCDF. So xarray moved to the
+  `test` extra alongside `netcdf4`, and the core install is one dependency lighter.
+
+- **The `baseline` job could never have passed, and is now manual-only.** The
+  GSHHS download URL `m_gshhs` uses currently returns 404. My machine still holds
+  a cached copy in `~/.local/share/cartopy/shapefiles/gshhs/` from an older
+  successful download, so the committed references were rendered *with* those
+  coastlines — while a clean runner silently omits them from examples 10, 12, 16,
+  17, 18 and sat_ex6. The comparison would fail on data availability rather than
+  on a code change, which is worse than no check.
+
+  The job is now gated on `workflow_dispatch`. The image comparison remains a local
+  pre-release gate, which is where it has earned its keep — it caught two
+  regressions during this work and three more since. Restoring it to CI depends on
+  `m_gshhs` having a source that resolves.
+
+Verified by reproducing CI locally rather than pushing hopefully: a fresh venv,
+`pip install -e ".[test]"`, `PY_M_MAP_SKIP_BASELINE=1 pytest tests -q` → 84 passed
+on matplotlib 3.11.1, which also confirms the code works on a newer matplotlib than
+the one the baselines were rendered with.
+
 ### S5. Faults the packaging checks found — **fixed**
 
 Running the distribution checks locally, rather than after pushing, turned up two

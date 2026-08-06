@@ -36,8 +36,12 @@ directly; py_m_map is built on top of it.
 pip install py_m_map
 ```
 
-Requires Python 3.10 or newer. Dependencies: numpy, matplotlib, pyproj, shapely,
-xarray, scipy and cartopy.
+Requires Python 3.10 or newer. Dependencies: numpy, matplotlib (≥ 3.5), pyproj,
+shapely, scipy and cartopy.
+
+To run the test suite and the examples you also need xarray and a netCDF backend,
+which `pip install -e ".[test]"` supplies — the examples read NOAA netCDF, and
+xarray cannot open a netCDF file without one.
 
 ## Getting started
 

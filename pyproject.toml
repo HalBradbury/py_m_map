@@ -41,11 +41,14 @@ dependencies = [
     "matplotlib>=3.5",
     "pyproj",
     "shapely",
-    "xarray",
     "scipy",
     # Coastline and shapefile loading: m_coast, m_gshhs*, m_usercoast.
     "cartopy",
 ]
+# xarray is deliberately NOT here: nothing in py_m_map imports it.  It was
+# declared for netCDF elevation loading that m_elev never ended up doing (it reads
+# the bundled .npz via numpy, and m_etopo2 reads a raw binary).  Only the example
+# scripts read netCDF, so it lives in the test extra along with a backend.
 
 [project.urls]
 Homepage = "https://github.com/HalBradbury/py_m_map"
@@ -55,7 +58,16 @@ Changelog = "https://github.com/HalBradbury/py_m_map/blob/main/CHANGELOG.md"
 "Original m_map (MATLAB)" = "https://www-old.eoas.ubc.ca/~rich/map.html"
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = [
+    "pytest",
+    # The satellite examples read NOAA netCDF through xarray.  xarray alone cannot
+    # open a netCDF file — it needs a backend, and without one it raises
+    # "found the following matches ... but their dependencies may not be
+    # installed".  A conda environment usually has netCDF4 already, which is why
+    # this only surfaced on a clean CI runner.
+    "xarray",
+    "netcdf4",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
