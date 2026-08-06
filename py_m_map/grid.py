@@ -1601,17 +1601,24 @@ def _draw_ruler_corner(ax, cx, cy, dx, dy, c_h, c_v, lw, diag_offset_y=0,
     c_h: colour of the adjacent horizontal edge strip (bottom/top).
     c_v: colour of the adjacent vertical edge strip (left/right).
 
-    The black/white alternation continues *through* the corner, so each corner
-    triangle takes the opposite state to the strip beside it.  A half-line from
-    the inner corner edge to the diagonal midpoint is therefore drawn when the
-    adjacent strip is empty ('white'), and omitted when the adjacent strip is
-    full ('k') — the latter already carries a centre line, and continuing it
-    into the corner would run two segments together with no break.
+    Whether the corner is its own box depends on the ticks, and that decides the
+    half-line to the diagonal too.  Treating each of the two edges separately:
 
-    tick_at_h: an x-tick falls exactly at the corner x position.  Draws the
-    vertical separator line through the corner box that the main separator loop
-    cannot place (it only covers interior breaks).
-    tick_at_v: same for a y-tick at the corner y position (horizontal separator).
+    * **A tick falls at the corner** (tick_at_h for an x-tick at the corner x,
+      tick_at_v for a y-tick at the corner y).  The corner is delimited: a
+      separator is drawn along that inner edge — the main separator loop cannot
+      place it, since that only covers interior breaks.  The corner triangle is
+      then a fresh box continuing the alternation, so it carries a line to the
+      diagonal only when the strip beside it is *empty*.
+
+    * **No tick there.**  Nothing delimits the corner, so the adjacent strip's
+      style simply runs on into it as far as the diagonal.  The line is drawn
+      only when that strip is *full*, continuing its centre line.
+
+    The condition therefore inverts between the two cases, which is why a frame
+    whose edges do not all end on a tick — the common case, since the tick step
+    rarely divides the range exactly — gets a different corner treatment on each
+    side.
 
     diag_offset_y: shift the diagonal by this many display pixels in y
     (positive = up on screen).
@@ -1630,26 +1637,27 @@ def _draw_ruler_corner(ax, cx, cy, dx, dy, c_h, c_v, lw, diag_offset_y=0,
     ax.plot([cx, cx + dx], [y_start, y_end],
             color='k', linewidth=lw, antialiased=True,
             solid_capstyle='butt', clip_on=False, zorder=12)
-    # Half-lines from inner corner edges to the diagonal midpoint.
-    # mx, my is the midpoint of the diagonal — where both arms terminate.
-    # Drawn when the adjacent strip is EMPTY, so the alternation continues
-    # through the corner rather than extending an already-drawn centre line.
-    mx = cx + dx / 2.0
-    my = cy + dy / 2.0
-    if c_h != 'k':
-        ax.plot([cx, mx], [my, my], 'k-', lw=lw,
-                antialiased=False, solid_capstyle='butt', clip_on=False, zorder=12)
-    if c_v != 'k':
-        ax.plot([mx, mx], [cy, my], 'k-', lw=lw,
-                antialiased=False, solid_capstyle='butt', clip_on=False, zorder=12)
-    # Tick-at-corner cases: a grid tick coincides with the corner position, so
-    # the separator marking it has to be drawn here — the main separator loop
-    # only covers interior breaks.
+    # Separators delimiting the corner box, drawn only where a tick lands on it.
     if tick_at_h:
         ax.plot([cx, cx], [cy, cy + dy], 'k-', lw=lw,
                 antialiased=False, solid_capstyle='butt', clip_on=False, zorder=12)
     if tick_at_v:
         ax.plot([cx, cx + dx], [cy, cy], 'k-', lw=lw,
+                antialiased=False, solid_capstyle='butt', clip_on=False, zorder=12)
+
+    # Half-lines from the inner corner edges to the diagonal midpoint, where both
+    # terminate.  Delimited by a tick -> a new box, so drawn when the neighbouring
+    # strip is empty.  Not delimited -> the neighbour's style continues into the
+    # corner, so drawn when that strip is full.  See the docstring.
+    mx = cx + dx / 2.0
+    my = cy + dy / 2.0
+    draw_h = (c_h != 'k') if tick_at_h else (c_h == 'k')
+    draw_v = (c_v != 'k') if tick_at_v else (c_v == 'k')
+    if draw_h:
+        ax.plot([cx, mx], [my, my], 'k-', lw=lw,
+                antialiased=False, solid_capstyle='butt', clip_on=False, zorder=12)
+    if draw_v:
+        ax.plot([mx, mx], [cy, my], 'k-', lw=lw,
                 antialiased=False, solid_capstyle='butt', clip_on=False, zorder=12)
 
 

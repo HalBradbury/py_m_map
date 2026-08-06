@@ -361,6 +361,7 @@ where every meridian converges.
 | M12 | Latitude labels collapse onto one radius | **Fixed** |
 | M13 | Pseudocylindrical longitude labels all stack at the pole | **Fixed** |
 | M14 | Orthographic labels crowd: far-side meridians, duplicate ±180°, collisions | **Fixed** |
+| M15 | Ruler-box corners ignored whether a tick lands on them | **Fixed** |
 
 Circular and pseudocylindrical tick labels are now verified collision-free across
 orthographic, azimuthal equal-area and stereographic at two cap radii, and spread
@@ -471,6 +472,40 @@ The `lat_label_lon` docstring was also corrected — it claimed a default of
 `center_lon + 90°`, which the code has never implemented. `sat_ex2` keeps its
 explicit `lat_label_lon=-75.0`, which is now a presentational preference rather
 than a workaround.
+
+### M15 — Ruler-box corners ignored whether a tick lands on them · **Fixed** *(a regression I introduced)*
+
+`grid.py:_draw_ruler_corner`
+
+The `boxstyle='line'` corner has two rules, not one, and which applies depends on
+whether a grid tick falls exactly on the corner:
+
+| at the corner | corner box | half-line to the diagonal |
+|---|---|---|
+| tick present | delimited by a separator; a fresh box continuing the alternation | drawn when the neighbouring strip is **empty** |
+| no tick | not delimited; the neighbour's style runs on into it | drawn when that strip is **full** |
+
+The condition inverts between them. Early in this work I was told "a line to the
+diagonal if the box next to it is empty, and no line if the box next to it is
+full" and applied it to *every* corner. That is right only where ticks land on
+both edges — which on `sat_ex5`'s frame is the bottom-left corner and nowhere
+else, exactly the one corner that still looked right afterwards.
+
+**Failure:** `m_proj('miller', lon=[100, 260], lat=[0, 65])` with
+`m_grid(box='fancy', boxstyle='line')`. Longitude ticks fall every 25° from 100°,
+so one lands on the left edge but none on the right (250 + 25 > 260); likewise for
+latitude. Three of the four corners were therefore wrong — a stub where there
+should be none at top-right and bottom-right, and a missing continuation of the
+left/right centre line at top-left and top-right.
+
+**Diagnosis note.** `IMPLEMENTATION_PLAN.md` had described both branches correctly
+from the start. Had I read it before changing the code, the over-generalisation
+would have been obvious — the plan is the design record, and contradicting it
+should have been a signal to check rather than proceed.
+
+Covered by `test_ruler_box_corner_follows_the_tick_rule`, which pins all eight
+colour/tick combinations plus two mixed cases. Affected `sat_ex5`, `example6` and
+`example15_inverse` — the three figures using this box style.
 
 ### M12 — Latitude labels collapse onto one radius along an explicit meridian · **Fixed**
 

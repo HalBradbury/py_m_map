@@ -575,44 +575,87 @@ def test_pseudocylindrical_longitude_labels_are_spread_out(projection, lon):
 # Fancy box corners
 # ---------------------------------------------------------------------------
 
-def test_ruler_box_corner_stubs_follow_alternation():
-    """
-    The 'line' fancy box breaks its centre line at each corner: a corner stub is
-    drawn only when the strip beside it is empty, so the alternation continues
-    through the corner instead of running two segments together.
-    """
-    from py_m_map import grid as gridmod
+class _CornerRecorder:
+    """Collects the line segments _draw_ruler_corner emits, classified by shape."""
 
-    calls = []
+    def __init__(self):
+        self.segments = []
 
-    class _Recorder:
-        def fill(self, *a, **k):
-            return [_Patch()]
+    # --- minimal Axes surface ------------------------------------------------
+    def fill(self, *a, **k):
+        return [_CornerRecorder._Patch()]
 
-        def plot(self, xs, ys, *a, **k):
-            calls.append((tuple(np.atleast_1d(xs)), tuple(np.atleast_1d(ys))))
+    def plot(self, xs, ys, *a, **k):
+        self.segments.append((tuple(np.atleast_1d(xs)), tuple(np.atleast_1d(ys))))
 
-        def add_patch(self, *a, **k):
-            pass
+    def add_patch(self, *a, **k):
+        pass
 
     class _Patch:
         def set_antialiased(self, *_a):
             pass
 
-    for c_h, c_v, n_expected in [
-        ('k', 'k', 0),            # both strips full  -> diagonal only
-        ('k', 'white', 1),        # one empty         -> one stub
-        ('white', 'k', 1),
-        ('white', 'white', 2),    # both empty        -> full chevron
-    ]:
-        calls.clear()
-        gridmod._draw_ruler_corner(_Recorder(), 0.0, 0.0, -1.0, -1.0,
-                                   c_h, c_v, lw=0.4)
-        # One call is always the diagonal from the inner to the outer corner.
-        diagonals = [c for c in calls
-                     if c[0] == (0.0, -1.0) and c[1] == (0.0, -1.0)]
-        assert len(diagonals) == 1, f'{(c_h, c_v)}: expected exactly one diagonal'
-        stubs = len(calls) - len(diagonals)
-        assert stubs == n_expected, (
-            f'{(c_h, c_v)}: expected {n_expected} corner stub(s), got {stubs}'
-        )
+    # --- classification, for a corner at (0,0) with dx = dy = -1 -------------
+    #   diagonal   inner corner to outer corner
+    #   sep_h      vertical line delimiting the box from the horizontal strip
+    #   sep_v      horizontal line delimiting it from the vertical strip
+    #   stub_h     half-line along the horizontal strip's centre line
+    #   stub_v     half-line along the vertical strip's centre line
+    SHAPES = {
+        ((0.0, -1.0), (0.0, -1.0)): 'diagonal',
+        ((0.0, 0.0), (0.0, -1.0)): 'sep_h',
+        ((0.0, -1.0), (0.0, 0.0)): 'sep_v',
+        ((0.0, -0.5), (-0.5, -0.5)): 'stub_h',
+        ((-0.5, -0.5), (0.0, -0.5)): 'stub_v',
+    }
+
+    def kinds(self):
+        out = []
+        for xs, ys in self.segments:
+            out.append(self.SHAPES.get((xs, ys), f'UNKNOWN{xs}{ys}'))
+        return sorted(out)
+
+
+@pytest.mark.parametrize('c_h,c_v,tick_h,tick_v,expected', [
+    # A tick at the corner delimits it: the corner triangle becomes a new box
+    # continuing the alternation, so it carries a line only when the strip beside
+    # it is EMPTY.
+    ('k', 'k', True, True, ['diagonal', 'sep_h', 'sep_v']),
+    ('k', 'white', True, True, ['diagonal', 'sep_h', 'sep_v', 'stub_v']),
+    ('white', 'k', True, True, ['diagonal', 'sep_h', 'sep_v', 'stub_h']),
+    ('white', 'white', True, True,
+     ['diagonal', 'sep_h', 'sep_v', 'stub_h', 'stub_v']),
+    # No tick: nothing delimits the corner and the strip's own style runs on into
+    # it as far as the diagonal, so the line is drawn when that strip is FULL.
+    # The condition inverts — this is what sat_ex5 got wrong.
+    ('k', 'k', False, False, ['diagonal', 'stub_h', 'stub_v']),
+    ('k', 'white', False, False, ['diagonal', 'stub_h']),
+    ('white', 'k', False, False, ['diagonal', 'stub_v']),
+    ('white', 'white', False, False, ['diagonal']),
+    # Mixed, as at sat_ex5's top-left (x-tick present, y-tick absent).
+    ('k', 'k', True, False, ['diagonal', 'sep_h', 'stub_v']),
+    ('white', 'white', False, True, ['diagonal', 'sep_v', 'stub_v']),
+])
+def test_ruler_box_corner_follows_the_tick_rule(c_h, c_v, tick_h, tick_v, expected):
+    """
+    The 'line' fancy box corner depends on whether a tick lands on it:
+
+      tick present -> the corner is delimited by a separator, and begins a fresh
+                      box, so it gets a line only when the neighbouring strip is
+                      empty;
+      no tick      -> nothing delimits it and the neighbour's style continues to
+                      the diagonal, so it gets a line only when that strip is full.
+
+    Previously the "empty" condition was used unconditionally, which is right only
+    where ticks happen to land on both edges — the bottom-left corner of sat_ex5,
+    and nowhere else on that frame.
+    """
+    from py_m_map import grid as gridmod
+
+    rec = _CornerRecorder()
+    gridmod._draw_ruler_corner(rec, 0.0, 0.0, -1.0, -1.0, c_h, c_v, lw=0.4,
+                               tick_at_h=tick_h, tick_at_v=tick_v)
+    assert rec.kinds() == sorted(expected), (
+        f'c_h={c_h} c_v={c_v} tick_h={tick_h} tick_v={tick_v}: '
+        f'got {rec.kinds()}, expected {sorted(expected)}'
+    )
