@@ -192,15 +192,67 @@ def _compare(current: Path, baseline: Path) -> str | None:
             f'    PY_M_MAP_UPDATE_BASELINE=1 pytest {current.stem and "tests"} -q')
 
 
+#: Minimum fraction of a figure that must be non-background for it to be plausible.
+#: The examples all draw a map filling most of the canvas; anything under this is
+#: blank or nearly so.  Measured across the current 27 figures the lowest is ~8 %.
+MIN_INK_FRACTION = 0.02
+
+
+def _ink_fraction(path: Path) -> float:
+    """Fraction of pixels that are not the background colour."""
+    import numpy as np
+    img = _load(path)
+    rgb = img[:, :, :3] if img.shape[-1] >= 3 else img
+    # "Background" is whatever the corners agree on, which handles white and the
+    # grey/ocean-tinted figures alike.
+    corners = np.stack([rgb[0, 0], rgb[0, -1], rgb[-1, 0], rgb[-1, -1]])
+    background = np.median(corners, axis=0)
+    return float((np.abs(rgb - background).max(axis=2) > 0.02).mean())
+
+
+def _check_plausible(path: Path) -> str | None:
+    """
+    Cheap, environment-independent sanity check on a rendered figure.
+
+    The pixel-exact baseline comparison cannot run everywhere (see the caveats
+    above), but "did this figure come out blank" can, and that is the failure mode
+    that has actually bitten: a missing GSHHS download omits every coastline, and an
+    off-map m_pcolor once painted a whole map in one colour — both of which the
+    example tests passed silently because they only assert that savefig did not
+    raise.
+    """
+    import numpy as np
+    img = _load(path)
+    if min(img.shape[:2]) < 50:
+        return f'suspiciously small: {img.shape[1]}x{img.shape[0]} px'
+    ink = _ink_fraction(path)
+    if ink < MIN_INK_FRACTION:
+        return (f'only {ink * 100:.2f} % of the figure differs from its background '
+                f'(minimum {MIN_INK_FRACTION * 100:.0f} %) — it is blank or nearly so')
+    return None
+
+
 @pytest.fixture(autouse=True)
 def image_baseline(request):
     """
-    Compare any PNG a test writes against ``tests/baseline/``.
+    Check any PNG a test writes: always for plausibility, and against
+    ``tests/baseline/`` for an exact match where that is meaningful.
 
     Tests that write no images (the unit/regression tests) are unaffected.
     """
     if SKIP:
+        # Still worth confirming the figures are not blank — that check is portable.
+        before_skip = _png_state(OUTPUT_DIR)
         yield
+        after_skip = _png_state(OUTPUT_DIR)
+        problems = []
+        for path in sorted(p for p, m in after_skip.items() if before_skip.get(p) != m):
+            issue = _check_plausible(path)
+            if issue:
+                problems.append(f'{path.name}: {issue}')
+        if problems:
+            pytest.fail('rendered figure looks wrong:\n  ' + '\n  '.join(problems),
+                        pytrace=False)
         return
 
     # A GSHHS load failure only warns and omits the coastline, so a figure rendered
@@ -234,6 +286,10 @@ def image_baseline(request):
     failures: list[str] = []
 
     for path in written:
+        issue = _check_plausible(path)
+        if issue:
+            failures.append(f'{path.name}: {issue}')
+            continue
         reference = BASELINE_DIR / path.relative_to(OUTPUT_DIR)
         if UPDATE:
             reference.parent.mkdir(parents=True, exist_ok=True)

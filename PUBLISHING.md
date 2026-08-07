@@ -262,16 +262,32 @@ something my environment supplied that a fresh install does not.
   omits them from examples 9, 10, 12, 16, 17 and sat_ex6. The comparison failed on
   data availability rather than on a code change, which is worse than no check.
 
-  Gating it to manual dispatch was the first response, but that only hid the problem:
-  a manual run still failed, and the 21 unaffected figures lost their CI guard for
-  nothing. **Now fixed properly** — `gshhs.py` records failed loads, each reference
-  stores the failure set it was blessed under, and a figure is compared only when the
-  current set matches. The job runs on every push again.
+  **This took three attempts and the first two were wrong**, which is worth recording
+  because the mistake was the same each time: fixing one cause and assuming it was the
+  only one. Reproducing CI's exact dependency set locally finally enumerated them.
 
-  Verified three ways: locally nothing is skipped and all 27 figures compare; with the
-  cache hidden, 6 skip with a notice and 21 still compare; and a deliberately
-  corrupted reference is still caught, including for `example9`, whose `c:4` load
-  fails even on a primed cache and which a blunter rule would have left unguarded.
+  Three independent environmental causes, none a code change:
+
+  | Figures | Cause |
+  |---|---|
+  | 9, 10, 12, 16, 17, sat_ex6 | GSHHS data unobtainable (404) |
+  | example18 | `rasterio` / `osgeo` absent → synthetic DEM fallback, 31 % of the figure |
+  | example15 | cartopy 0.25 shifts the projected extent; tight-bbox canvas 1298×795 → 1248×785 |
+
+  Pinning matplotlib and numpy was not enough, and pinning every optional package
+  would still leave the GSHHS cache unobtainable. **Settled: the exact comparison is a
+  local pre-release gate**, where it has caught five real regressions.
+
+  What CI runs instead is portable and catches the failure mode that actually bit:
+  `conftest` asserts every rendered figure is **not blank**, on every job including
+  those with the comparison skipped. A missing coastline download or an `m_pcolor`
+  that paints over the map both produce a figure the old "savefig did not raise"
+  tests passed happily. Threshold is 2 % non-background pixels; the thinnest real
+  figure is 5.4 %, and a synthesised blank one reports 0.00 %.
+
+  The per-figure GSHHS signature is kept — it makes the local check honest when a
+  cache state changes, and `example9` fails `c:4` even on a primed cache, so a
+  blunter "skip if anything failed" rule would have retired that figure's guard.
 
 Verified by reproducing CI locally rather than pushing hopefully: a fresh venv,
 `pip install -e ".[test]"`, `PY_M_MAP_SKIP_BASELINE=1 pytest tests -q` → 84 passed

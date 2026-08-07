@@ -65,17 +65,31 @@ jobs:
   #   PY_M_MAP_UPDATE_BASELINE=1 pytest tests -q
   # and commit the change alongside whatever made the figures move.
   #
-  # This runs on every push again.  It could not before: the GSHHS URL m_gshhs uses
-  # returns 404, so a clean runner renders examples 9, 10, 12, 16, 17 and sat_ex6
-  # with their coastlines silently omitted, while the references were blessed on a
-  # machine holding an older cached copy — the comparison failed on data
-  # availability rather than on a code change.
+  # MANUAL ONLY — and that is a settled conclusion, not a workaround.
   #
-  # Each reference now records the set of GSHHS load failures it was blessed under
-  # (tests/baseline/*.gshhs.txt), and conftest compares only when the current set
-  # matches.  On a clean runner those six figures are skipped with a notice naming
-  # both states, and the other 21 are still guarded.
+  # A zero-tolerance pixel comparison is only meaningful when the whole rendering
+  # environment matches the machine that blessed the references, and three
+  # independent things break that, none of them a code change:
+  #
+  #   * GSHHS data availability. The download URL returns 404, so a clean runner
+  #     omits the coastlines from examples 9, 10, 12, 16, 17 and sat_ex6. (Handled
+  #     per-figure: each reference records the GSHHS failure set it was blessed
+  #     under, and mismatches skip with a notice.)
+  #   * Optional readers. example18 uses rasterio and osgeo/GDAL for its DEM and
+  #     falls back to synthetic data without them — 31 % of that figure changes.
+  #   * Library versions. cartopy 0.25 shifts example15's projected extent enough to
+  #     change the tight-bbox canvas from 1298x795 to 1248x785 px.
+  #
+  # Pinning matplotlib and numpy is not enough, and pinning every optional package
+  # would still leave the GSHHS cache unobtainable. So the exact comparison stays a
+  # local pre-release gate, where it has caught five real regressions.
+  #
+  # What CI does instead is portable and catches the failure mode that actually bit:
+  # conftest asserts every rendered figure is not blank, on every job. A missing
+  # coastline download or an m_pcolor that paints over the map both produce a figure
+  # the old "savefig did not raise" tests passed happily.
   baseline:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       MPLBACKEND: Agg
