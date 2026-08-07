@@ -255,18 +255,23 @@ something my environment supplied that a fresh install does not.
   reads a raw binary. Only the example scripts read netCDF. So xarray moved to the
   `test` extra alongside `netcdf4`, and the core install is one dependency lighter.
 
-- **The `baseline` job could never have passed, and is now manual-only.** The
-  GSHHS download URL `m_gshhs` uses currently returns 404. My machine still holds
-  a cached copy in `~/.local/share/cartopy/shapefiles/gshhs/` from an older
-  successful download, so the committed references were rendered *with* those
-  coastlines — while a clean runner silently omits them from examples 10, 12, 16,
-  17, 18 and sat_ex6. The comparison would fail on data availability rather than
-  on a code change, which is worse than no check.
+- **The `baseline` job could not pass on a clean runner.** The GSHHS download URL
+  `m_gshhs` uses returns 404. My machine still holds a cached copy in
+  `~/.local/share/cartopy/shapefiles/gshhs/` from an older successful download, so
+  the references were blessed *with* those coastlines — while a clean runner silently
+  omits them from examples 9, 10, 12, 16, 17 and sat_ex6. The comparison failed on
+  data availability rather than on a code change, which is worse than no check.
 
-  The job is now gated on `workflow_dispatch`. The image comparison remains a local
-  pre-release gate, which is where it has earned its keep — it caught two
-  regressions during this work and three more since. Restoring it to CI depends on
-  `m_gshhs` having a source that resolves.
+  Gating it to manual dispatch was the first response, but that only hid the problem:
+  a manual run still failed, and the 21 unaffected figures lost their CI guard for
+  nothing. **Now fixed properly** — `gshhs.py` records failed loads, each reference
+  stores the failure set it was blessed under, and a figure is compared only when the
+  current set matches. The job runs on every push again.
+
+  Verified three ways: locally nothing is skipped and all 27 figures compare; with the
+  cache hidden, 6 skip with a notice and 21 still compare; and a deliberately
+  corrupted reference is still caught, including for `example9`, whose `c:4` load
+  fails even on a primed cache and which a blunter rule would have left unguarded.
 
 Verified by reproducing CI locally rather than pushing hopefully: a fresh venv,
 `pip install -e ".[test]"`, `PY_M_MAP_SKIP_BASELINE=1 pytest tests -q` → 84 passed

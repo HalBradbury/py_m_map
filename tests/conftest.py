@@ -75,6 +75,38 @@ TOLERANCES: dict[str, float] = {
 }
 
 
+def _gshhs_signature(gshhs_module) -> str:
+    """
+    Which GSHHS loads failed, as a stable one-line signature.
+
+    Empty string when none did, so figures that use no GSHHS data compare normally.
+    """
+    if gshhs_module is None:
+        return ''
+    failures = sorted({f'{scale}:{level}'
+                       for scale, level, _reason in gshhs_module.load_failures()})
+    return ' '.join(failures)
+
+
+def _signature_path(reference: Path) -> Path:
+    """Sidecar recording the data state a reference was blessed under."""
+    return reference.with_suffix('.gshhs.txt')
+
+
+def _record_signature(reference: Path, signature: str) -> None:
+    """Store the data state alongside a reference, or remove a stale sidecar."""
+    target = _signature_path(reference)
+    if signature:
+        target.write_text(signature + '\n')
+    elif target.exists():
+        target.unlink()
+
+
+def _read_signature(reference: Path) -> str:
+    target = _signature_path(reference)
+    return target.read_text().strip() if target.exists() else ''
+
+
 def _png_state(directory: Path) -> dict[Path, tuple[float, int]]:
     """mtime and size of every PNG under `directory`, excluding diff output."""
     state: dict[Path, tuple[float, int]] = {}
@@ -171,9 +203,28 @@ def image_baseline(request):
         yield
         return
 
+    # A GSHHS load failure only warns and omits the coastline, so a figure rendered
+    # without that data is not comparable to a reference rendered with it — the
+    # difference is data availability, not a code change (REVIEW.md M16).
+    #
+    # Comparing only when the data state *matches the reference* is what keeps this
+    # useful. Skipping whenever any load fails would be too blunt: example9 requests
+    # five GSHHS scales and one level 404s even on a primed cache, so that figure
+    # would lose its guard permanently. Instead each reference records the set of
+    # failures present when it was blessed, and the comparison runs when the current
+    # set is identical.
+    try:
+        from py_m_map import gshhs as _gshhs
+    except Exception:
+        _gshhs = None
+    if _gshhs is not None:
+        _gshhs.clear_load_failures()
+
     before = _png_state(OUTPUT_DIR)
     yield
     after = _png_state(OUTPUT_DIR)
+
+    signature = _gshhs_signature(_gshhs)
 
     written = sorted(p for p, meta in after.items() if before.get(p) != meta)
     if not written:
@@ -187,15 +238,27 @@ def image_baseline(request):
         if UPDATE:
             reference.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, reference)
+            _record_signature(reference, signature)
             continue
         if not reference.exists():
             # A newly added example: adopt its first render so the next run has
             # something to compare against, and say so rather than passing mutely.
             reference.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, reference)
+            _record_signature(reference, signature)
             print(f'\n[baseline] created reference for new output {path.name} — '
                   f'check it looks right, then commit tests/baseline/{path.name}')
             continue
+
+        blessed = _read_signature(reference)
+        if blessed != signature:
+            print(f'\n[baseline] skipped {path.name}: the GSHHS data available now '
+                  f'differs from when the reference was blessed, so the figures are '
+                  f'not comparable.\n'
+                  f'    reference rendered with failures: {blessed or "(none)"}\n'
+                  f'    this run:                        {signature or "(none)"}')
+            continue
+
         message = _compare(path, reference)
         if message:
             failures.append(f'{path.name}: {message}')

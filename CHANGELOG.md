@@ -120,7 +120,8 @@ boundary (bottom-most, left-most), which is only well defined for a rectangle.
   introduced while fixing the defects above, both of which the test suite passed.
 - GitHub Actions workflows: a Python 3.10/3.11/3.12 test matrix, distribution checks
   that catch a missing README or omitted package data, and the pinned-stack image
-  comparison. The image job is **manual-only** — see Known limitations.
+  comparison, which runs on every push and skips only the figures whose GSHHS data
+  state differs from the reference's.
 - `sat_ex8` now skips with an explanation when its local DEM is absent, instead of
   failing. Found by extracting the sdist and running the shipped suite offline.
 
@@ -128,9 +129,11 @@ boundary (bottom-most, left-most), which is only well defined for a rectangle.
 
 - **GSHHS data is unfetchable upstream** (the URL returns 404), so `m_gshhs` warns
   and omits coastlines. Examples 9, 10, 12, 16, 17, 18 and sat_ex6 render without
-  their coasts on any machine without a cached copy. This is also why the image
-  comparison cannot run in CI: a clean runner produces different figures from the
-  committed references for a data reason rather than a code one.
+  their coasts on any machine without a cached copy. The image comparison handles
+  this rather than being defeated by it: each reference records the GSHHS failure set
+  it was blessed under, and a figure is compared only when the current set matches —
+  so on a clean machine those six are skipped with a notice and the other 21 are
+  still guarded.
 - `m_coast` still fills lakes with the land colour; only the *mask* handles holes.
 - Custom tick label text and `xlabeldir` are unimplemented (they warn).
 - 7 of 21 m_map projections are not ported; see `IMPLEMENTATION_PLAN.md`.

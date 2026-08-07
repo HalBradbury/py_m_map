@@ -524,13 +524,23 @@ own test run demonstrated the suite passing on it.
 
 Two consequences worth knowing:
 
-- **The image baseline cannot run in CI.** The committed references were rendered on
-  a machine holding a stale cached copy under
-  `~/.local/share/cartopy/shapefiles/gshhs/`; a clean runner omits those coastlines,
-  so the comparison would fail on data availability. The baseline job is therefore
-  manual-only.
 - **Anyone installing fresh gets coastline-less figures** from those examples, with
   only a warning to indicate it.
+- **It broke the image baseline in CI**, since the references were blessed on a
+  machine holding a stale cached copy under
+  `~/.local/share/cartopy/shapefiles/gshhs/`. **Now handled:** `gshhs.py` records
+  every failed load (`load_failures()`), each reference stores the failure set it was
+  blessed under in `tests/baseline/<name>.gshhs.txt`, and `conftest.py` compares only
+  when the current set matches — otherwise it skips that figure with a notice naming
+  both states.
+
+  Comparing on a *matching* data state rather than simply skipping whenever any load
+  fails is what keeps this useful. `example9` requests five GSHHS scales and level
+  `c:4` 404s even on a primed cache, so a blunter rule would have retired that
+  figure's guard permanently. Verified three ways: locally nothing is skipped and all
+  27 figures compare; on a clean cache the 6 affected figures skip and the other 21
+  still compare; and a deliberately corrupted reference is still caught, including for
+  `example9` itself.
 
 **Fix** is upstream of this project: either cartopy's GSHHS URL is repaired, or
 `m_gshhs` gains its own source. A local mitigation would be to make the failure

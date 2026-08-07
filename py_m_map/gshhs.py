@@ -26,6 +26,25 @@ from .hatch import _hatch_xy
 
 _LEVELS = (1, 2, 3, 4)
 
+#: Every GSHHS load that failed this session, as (scale, level, reason).
+#:
+#: A failure only warns and omits the coastline, so a figure can come out looking
+#: like a valid map with no coast and nothing to signal it (REVIEW.md M16). Callers
+#: that need to know — the image-baseline fixture, which cannot meaningfully compare
+#: a figure whose data was unavailable — can read this instead of scraping warnings.
+#: Use `load_failures()` and `clear_load_failures()`.
+_LOAD_FAILURES: list[tuple[str, int, str]] = []
+
+
+def load_failures() -> list[tuple[str, int, str]]:
+    """GSHHS loads that failed so far, as (scale, level, reason)."""
+    return list(_LOAD_FAILURES)
+
+
+def clear_load_failures() -> None:
+    """Forget recorded GSHHS load failures."""
+    _LOAD_FAILURES.clear()
+
 
 def _load_gshhs_geoms(scale: str, level: int) -> list:
     """Return GSHHS geometries for *scale* / *level*, or [] if unavailable."""
@@ -35,6 +54,7 @@ def _load_gshhs_geoms(scale: str, level: int) -> list:
         path = gshhs_path(scale, level)
         return list(Reader(path).geometries())
     except Exception as e:
+        _LOAD_FAILURES.append((scale, level, str(e)))
         warnings.warn(
             f"m_gshhs: could not load GSHHS '{scale}' scale level {level} — {e}. "
             "Coastlines will be omitted. Check your internet connection or "

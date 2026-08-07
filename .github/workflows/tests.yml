@@ -65,18 +65,17 @@ jobs:
   #   PY_M_MAP_UPDATE_BASELINE=1 pytest tests -q
   # and commit the change alongside whatever made the figures move.
   #
-  # MANUAL ONLY, and it will not pass on a clean runner as things stand.  The
-  # GSHHS download URL that m_gshhs uses currently returns 404, so a machine with
-  # no cached copy renders examples 10, 12, 16, 17, 18 and sat_ex6 with their
-  # coastlines silently omitted, while the committed references were rendered on a
-  # machine that still holds an older cached copy.  The comparison would then fail
-  # on data availability rather than on a code change, which is worse than no
-  # check at all.  Until m_gshhs has a working source the image comparison is a
-  # local pre-release gate — it is run before every commit that touches rendering
-  # and has caught several real regressions there.  Trigger this job by hand when
-  # you want it against a primed cache.
+  # This runs on every push again.  It could not before: the GSHHS URL m_gshhs uses
+  # returns 404, so a clean runner renders examples 9, 10, 12, 16, 17 and sat_ex6
+  # with their coastlines silently omitted, while the references were blessed on a
+  # machine holding an older cached copy — the comparison failed on data
+  # availability rather than on a code change.
+  #
+  # Each reference now records the set of GSHHS load failures it was blessed under
+  # (tests/baseline/*.gshhs.txt), and conftest compares only when the current set
+  # matches.  On a clean runner those six figures are skipped with a notice naming
+  # both states, and the other 21 are still guarded.
   baseline:
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     env:
       MPLBACKEND: Agg

@@ -446,9 +446,9 @@ What is still not covered:
   (`m_quiver`, `m_vec`, `m_windbarb`) has no numerical test that a northward vector
   plots as north on a conic or stereographic projection — a plausible-looking wrong
   answer would pass.
-- The baseline cannot run in CI while the GSHHS download URL returns 404: a clean
-  runner omits those coastlines, so the comparison would fail on data availability.
-  It is a local pre-release gate.
+- Six figures lose their baseline guard on any machine that cannot fetch GSHHS data
+  (see below). The comparison degrades per-figure rather than wholesale, so the other
+  21 are still checked, but those six are only guarded where the data resolves.
 
 ### Lakes are masked but not rendered
 
@@ -479,7 +479,15 @@ first.
 
 The URL `m_gshhs` uses via cartopy returns 404, so coastlines are silently omitted
 with a warning on any machine without a cached copy. This affects examples 9, 10, 12,
-16, 17, 18 and sat_ex6, and is why the image baseline cannot run in CI.
+16, 17 and sat_ex6.
+
+`gshhs.py` records each failed load in `_LOAD_FAILURES`, exposed as `load_failures()`
+and `clear_load_failures()`. That exists so the image-baseline fixture can tell a
+data-availability difference from a code change: each reference stores the failure set
+it was blessed under in `tests/baseline/<name>.gshhs.txt`, and a figure is compared
+only when the current set matches. Note `example9` fails `c:4` even on a primed
+cache, so "skip whenever any load fails" would retire its guard permanently — the
+comparison keys on the set *matching*, not on it being empty.
 
 ### Geomagnetic coordinate support absent
 
