@@ -32,9 +32,14 @@ directly; py_m_map is built on top of it.
 
 ## Install
 
+py_m_map is not yet on PyPI. Install it straight from GitHub:
+
 ```bash
-pip install py_m_map
+pip install git+https://github.com/HalBradbury/py_m_map.git
 ```
+
+This needs `git` on your machine. pip installs the dependencies listed below
+automatically.
 
 Requires Python 3.10 or newer. Dependencies: numpy, matplotlib (≥ 3.5), pyproj,
 shapely, scipy and cartopy.
